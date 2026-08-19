@@ -29,6 +29,17 @@ jobs:
         with:
           node-version: 20
 
+      - name: Normalize generated patch script escaping
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("scripts/ready_train_patch.py")
+          s = p.read_text()
+          bad = chr(92) + chr(92) + chr(39)
+          good = chr(92) + chr(39)
+          p.write_text(s.replace(bad, good))
+          PY
+
       - name: Apply trainer patch
         run: python scripts/ready_train_patch.py
 
