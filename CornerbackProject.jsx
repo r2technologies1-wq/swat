@@ -1392,13 +1392,17 @@ function buildCoachSystem(state, plan, today) {
   FATIGUE_AREAS.concat(["systemic"]).forEach(function (a) { var lv = fatigueLevelAt(state.fatigue, a, today); if (lv > 0) fatigueParts.push(a + "=" + lv); });
   var memory = ((state.coachMemory || {}).observations || []).slice(-8).map(function (o) { return o.date + ": " + o.text; }).join(" | ") || "none yet";
   var recentFood = (state.nutrition || []).slice(-4).map(function (n) { return n.date + ": " + n.text; }).join(" | ") || "none";
+  var recentWater = (state.hydration || []).slice(-6).map(function (n) { return n.date + ": " + n.ounces + " oz"; }).join(" | ") || "none";
+  var lastCheck = (state.weeklyCheckins || []).slice(-1)[0];
+  var checkText = lastCheck ? (lastCheck.date + " weight=" + (lastCheck.bodyweight == null ? "?" : lastCheck.bodyweight) + " waist=" + (lastCheck.waist == null ? "?" : lastCheck.waist) + " feel=" + (lastCheck.feel || "") + " knee=" + (lastCheck.knee || "")) : "none yet";
+  var activeText = state.activeWorkout ? ("ACTIVE " + state.activeWorkout.date + " " + (SESSIONS[state.activeWorkout.sessionId] ? SESSIONS[state.activeWorkout.sessionId].short : state.activeWorkout.sessionId) + " tier=" + state.activeWorkout.tier + " started=" + new Date(state.activeWorkout.startedAt).toISOString()) : "none";
   return (
     "You are the personalized trainer/coach brain inside the Cornerback Project. The app is the body/database; you are the adaptive reasoning layer. Motto: win the block, not the day. Never use shame or streak language. Be concise, specific, and action-oriented.\n" +
     "Today: " + today + " (phase " + plan.effPhase + "). Knee: " + kneeTxt + ". Coverage Skills stage: " + skillTxt + "/4. Bench working weight: " + benchW + " lb.\n" +
     "Week: " + dayLines + ".\nBudget: " + budget + ". Goals: " + goals + ".\n" +
     "Today's prescribed session: " + (todaySession ? todaySession.name : "none") + ". Exercises: " + todayExerciseText + ".\n" +
     "Current fatigue (0-3, decays unless re-reported): " + (fatigueParts.join(", ") || "none") + ".\n" +
-    "Recent coaching observations: " + memory + ".\nRecent food/context: " + recentFood + ".\n" +
+    "Recent coaching observations: " + memory + ".\nRecent food/context: " + recentFood + ". Recent water: " + recentWater + ". Last weekly check-in: " + checkText + ". Active workout: " + activeText + ".\n" +
     "CORE BEHAVIOR: The static program is the starting hypothesis. A/B/C are anchor templates, NOT a push/pull/legs split and NOT sacred day types. The trainer may intelligently combine compatible stimuli on the same day (for example easy aerobic + pull-up skill + a short arms block, or condensed Upper C + 15–20 min easy aerobic) when that better serves the weekly goals. Actual performance data changes future prescription inside safe program constraints. If the user reports what actually happened, update structured state — do not only give advice. A session can be full, partial, skipped, substituted, or mixed. Credit only exercises/stimuli actually completed. Do not create debt for every missed accessory. Primary stimuli matter more than optional accessories.\n" +
     "If the user says the workout was too hard: identify local vs systemic fatigue, log it, and use adjust_week_from_feedback. Hard Upper A should suppress pressing but can leave legs available; hard Lower or hard run should protect the next 24-48h of lower-body intensity. If very hard/systemically wrecked, protect recovery.\n" +
     "If the user says too easy: do NOT punish with random volume. For an accessory that was clearly too easy, use exercise_feedback too_easy (one normal increment). For bench, prefer log_bench with actual reps/RIR evidence rather than a blind jump. For running, record the observation and progress conservatively rather than making a huge one-session jump.\n" +
@@ -1408,7 +1412,7 @@ function buildCoachSystem(state, plan, today) {
     "Allowed actions:\n" +
     "complete_session {date?, feel?}; log_partial_session {date?, duration?, exercises_completed?, exercises_skipped?, feel?, session_rpe?, completion_fraction?, notes?}; skip_session {date?, reason?}; recalc_week {}; move_session {slot,to_date};\n" +
     "adjust_week_from_feedback {date?, session_rpe?, fatigue_areas?, systemic_fatigue?, pain_areas?, notes?}; set_fatigue {area,level,note?}; exercise_feedback {name,difficulty,observed_rir?,note?} difficulty=too_easy|appropriate|too_hard; modify_today_session {remove_exercises?,add_exercises?,reason?}; set_today_time {minutes};\n" +
-    "log_bench {weight,reps?}; set_bench_weight {weight}; log_metric {kind,value}; log_food {text}; log_note {text}; set_goal {key,target}; set_knee {status}; set_availability {dow,minutes}; flag_exhausted {}; add_exercise {session,name,sets_reps?,weight?}; remove_exercise {name,session?}; set_exercise_weight {name,weight}; set_skill_stage {stage}.\n" +
+    "log_bench {weight,reps?}; set_bench_weight {weight}; log_metric {kind,value}; log_food {text}; log_water {ounces}; log_recovery {sleep_hours?,sleep_score?,feel?,note?}; weekly_checkin {bodyweight?,waist?,knee?,feel?,note?}; log_note {text}; set_goal {key,target}; set_knee {status}; set_availability {dow,minutes}; flag_exhausted {}; add_exercise {session,name,sets_reps?,weight?}; remove_exercise {name,session?}; set_exercise_weight {name,weight}; set_skill_stage {stage}.\n" +
     "Exercise names can be natural language. Dates YYYY-MM-DD; omit date for today. Multiple actions allowed. Never invent completed training. If the user says 'I only did bench and pullups', use log_partial_session — not complete_session. If they say 'that was brutal, adjust my week', use adjust_week_from_feedback so the calendar actually changes."
   );
 }
@@ -1450,7 +1454,7 @@ function freshDefaultState() {
   const calValues = {};
   CAL_BASELINES.forEach((b) => { calValues[b.key] = b.seed || ""; });
   return {
-    version: 2,
+    version: 3,
     settings: {
       weekdayMinutes: { 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 75, 6: 60 },
       knee: "good",
@@ -1471,6 +1475,10 @@ function freshDefaultState() {
     coachMemory: { observations: [] },
     log: [],
     nutrition: [],
+    hydration: [],
+    weeklyCheckins: [],
+    recoveryLog: [],
+    activeWorkout: null,
     notesLog: [],
     sessionMods: {},
     chat: [],
@@ -1502,6 +1510,10 @@ function mergeState(def, saved) {
   out.coachMemory = { observations: Array.isArray((saved.coachMemory || {}).observations) ? saved.coachMemory.observations : [] };
   out.log = Array.isArray(saved.log) ? saved.log : [];
   out.nutrition = Array.isArray(saved.nutrition) ? saved.nutrition : [];
+  out.hydration = Array.isArray(saved.hydration) ? saved.hydration : [];
+  out.weeklyCheckins = Array.isArray(saved.weeklyCheckins) ? saved.weeklyCheckins : [];
+  out.recoveryLog = Array.isArray(saved.recoveryLog) ? saved.recoveryLog : [];
+  out.activeWorkout = saved.activeWorkout || null;
   out.notesLog = Array.isArray(saved.notesLog) ? saved.notesLog : [];
   out.sessionMods = { ...(saved.sessionMods || {}) };
   out.chat = Array.isArray(saved.chat) ? saved.chat : [];
@@ -1579,7 +1591,7 @@ function makeActions(setState, notify) {
         const obs = [ ...((s.coachMemory || {}).observations || []) ];
         if (status === "partial") obs.push({ date, text: "Partial " + SESSIONS[sessionId].short + ": completed " + ((exercisesCompleted || []).join(", ") || "some work") + (exercisesSkipped.length ? "; skipped " + exercisesSkipped.join(", ") : "") });
         if (payload.feel === "Very Easy" || payload.feel === "Very Hard" || payload.feel === "Hard") obs.push({ date, text: SESSIONS[sessionId].short + " felt " + payload.feel.toLowerCase() + (payload.note ? " — " + payload.note : "") });
-        return { ...s, exercises, pins, dayFlags, dayWorkoutOverrides, fatigue, coachMemory: { observations: obs.slice(-80) }, log: [...s.log, entry] };
+        return { ...s, exercises, pins, dayFlags, dayWorkoutOverrides, fatigue, coachMemory: { observations: obs.slice(-80) }, activeWorkout: (s.activeWorkout && s.activeWorkout.date === date) ? null : s.activeWorkout, log: [...s.log, entry] };
       });
       if (payload.status === "partial" || (payload.exercisesSkipped && payload.exercisesSkipped.length)) notify("Partial work banked. Only what you actually did gets credit; important missing stimuli stay available later.");
     },
@@ -1666,6 +1678,32 @@ function makeActions(setState, notify) {
         return { ...s, pins };
       });
       notify("Moved. Everything else re-planned around it.");
+    },
+    startWorkout(date, sessionId, tier) {
+      up((s) => ({ ...s, activeWorkout: { date, sessionId, tier: Number(tier) || 60, startedAt: Date.now(), source: "web", watchStatus: "waiting_for_native_bridge" } }));
+      notify("Workout started. Text Coach during the session — changes can update the remainder live.");
+    },
+    stopActiveWorkout() { up((s) => ({ ...s, activeWorkout: null })); },
+    logWater(date, ounces, source) {
+      const oz = Number(ounces);
+      if (!Number.isFinite(oz) || oz <= 0) return;
+      up((s) => ({ ...s, hydration: [...(s.hydration || []), { date, ounces: oz, source: source || "manual", ts: Date.now() }].slice(-240) }));
+      notify("Hydration logged.");
+    },
+    logRecovery(date, payload) {
+      up((s) => ({ ...s, recoveryLog: [...(s.recoveryLog || []), { date, ...(payload || {}), ts: Date.now() }].slice(-120) }));
+    },
+    logWeeklyCheckin(date, payload) {
+      up((s) => {
+        const bodyweight = payload && payload.bodyweight != null && String(payload.bodyweight).trim() !== "" ? Number(payload.bodyweight) : null;
+        const waist = payload && payload.waist != null && String(payload.waist).trim() !== "" ? Number(payload.waist) : null;
+        const metrics = { ...s.metrics };
+        if (Number.isFinite(bodyweight)) metrics.bodyweight = [...metrics.bodyweight, { date, v: bodyweight }];
+        if (Number.isFinite(waist)) metrics.waist = [...metrics.waist, { date, v: waist }];
+        const check = { date, bodyweight: Number.isFinite(bodyweight) ? bodyweight : null, waist: Number.isFinite(waist) ? waist : null, knee: payload.knee || s.settings.knee, feel: payload.feel || "", note: payload.note || "", ts: Date.now() };
+        return { ...s, metrics, weeklyCheckins: [...(s.weeklyCheckins || []), check].slice(-60) };
+      });
+      notify("Weekly check-in saved. The trainer can use the trend when it plans the next week.");
     },
     recalc() { up((s) => ({ ...s })); notify("Week rebuilt around what you've completed."); },
     saveCalValue(key, val) {
@@ -2205,6 +2243,10 @@ function TodayView({ state, actions, plan, today, setTab }) {
   return (
     <div>
       <HelpCard state={state} actions={actions} />
+      {state.activeWorkout && state.activeWorkout.date === today && (
+        <ActiveWorkoutCard active={state.activeWorkout} session={SESSIONS[state.activeWorkout.sessionId]} actions={actions} />
+      )}
+      <WeeklyCheckinCard state={state} actions={actions} today={today} />
       <div className="card">
         <div className="scorehead">
           <div>
@@ -2246,7 +2288,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
                 </div>
                 {tier === 15 && <p className="small dim" style={{ marginTop: 8 }}>Not a failed version of the long workout — the highest-priority stimulus, preserved on a busy day.</p>}
                 {mergedOverride.reason && <p className="small" style={{ color: "var(--accent)", marginTop: 8 }}>{mergedOverride.reason}</p>}
-                <ExerciseList session={session} tier={tier} state={state} date={today} autoOverride={dayPlan.autoOverride} goCalibrate={() => setTab("CALIBRATION")} />
+                <ExerciseList session={session} tier={tier} state={state} date={today} autoOverride={dayPlan.autoOverride} goCalibrate={() => setTab("SETTINGS")} />
               </div>
             )}
 
@@ -2257,7 +2299,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
                 <p className="small dim" style={{ marginTop: 8 }}>{EFFORT_GUIDE}</p>
                 {showAccel && <p className="small" style={{ marginTop: 8, color: "var(--warn)" }}>{ACCEL_ADDON}</p>}
                 {!state.calibration.values.trackLaps && (phase === "cal" || phase === "sep") && (
-                  <p className="small faint" style={{ marginTop: 6 }}>Track unmeasured — workouts stay time/effort based until laps-per-mile is entered in Calibration.</p>
+                  <p className="small faint" style={{ marginTop: 6 }}>Track unmeasured — workouts stay time/effort based until laps-per-mile is entered in Settings → Calibration & Baselines.</p>
                 )}
               </div>
             )}
@@ -2267,7 +2309,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
                 <div className="eyebrow">Calibration rule</div>
                 <p className="small dim" style={{ marginTop: 6 }}>{CAL_RULE}</p>
                 <div className="btnrow">
-                  <button className="btn sm" onClick={() => setTab("CALIBRATION")}><Target size={14} /> Enter results in Calibration</button>
+                  <button className="btn sm" onClick={() => setTab("SETTINGS")}><Target size={14} /> Open Calibration & Baselines</button>
                 </div>
               </div>
             )}
@@ -2283,7 +2325,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
             )}
             {!panelOpen && (
               <div className="btnrow">
-                <button className="btn primary" onClick={() => setPanelOpen(true)}><Zap size={15} /> Start Workout</button>
+                <button className="btn primary" onClick={() => { actions.startWorkout(today, session.id, tier); setPanelOpen(true); }}><Zap size={15} /> Start Workout</button>
                 <button className="btn" onClick={() => setPanelOpen(true)}><Check size={15} /> Complete Workout</button>
                 {session.required !== false && session.kind !== "recovery" && (
                   <button className="btn subtle" onClick={() => setSkipOpen(true)}>Skip Today</button>
@@ -3078,6 +3120,85 @@ function CalibrationView({ state, actions }) {
   );
 }
 
+
+function ActiveWorkoutCard({ active, session, actions }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const mins = Math.max(0, Math.floor((now - active.startedAt) / 60000));
+  return (
+    <div className="card" style={{ borderColor: "var(--accent)" }}>
+      <div className="eyebrow" style={{ color: "var(--accent)" }}>LIVE WORKOUT · {mins} min</div>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
+        <b>{session ? session.name : active.sessionId}</b>
+        <span className="chip active">{active.tier} min plan</span>
+      </div>
+      <p className="small dim" style={{ marginTop: 8 }}>Text Coach while you train: “165×5, 2 left”, “machine is taken”, “only 12 minutes left”, “that hurt”, or “this is way too easy”. The trainer can change the remainder without pretending the original plan happened.</p>
+      <div className="btnrow"><button className="btn subtle sm" onClick={actions.stopActiveWorkout}>End live mode without logging</button></div>
+    </div>
+  );
+}
+
+function WeeklyCheckinCard({ state, actions, today }) {
+  const dow = dowMon0(today);
+  const isWed = dow === 2, isSun = dow === 6;
+  const last = (state.weeklyCheckins || []).slice(-1)[0];
+  const due = isSun && (!last || daysBetween(last.date, today) >= 5);
+  const weighDue = isWed || isSun;
+  const [open, setOpen] = useState(due);
+  const [weight, setWeight] = useState("");
+  const [waist, setWaist] = useState("");
+  const [feel, setFeel] = useState("");
+  const [note, setNote] = useState("");
+  if (!weighDue && !due) return null;
+  return (
+    <div className="card">
+      <div className="eyebrow">{isSun ? "SUNDAY · WEEKLY CHECK-IN" : "MIDWEEK · QUICK WEIGH-IN"}</div>
+      <p className="small dim" style={{ marginTop: 6 }}>{isSun ? "One minute: weight, waist if available, knee/recovery, and how the week felt. The trainer uses the trend — not one noisy number — to decide whether anything should change." : "Same morning conditions if practical. This is a trend point, not a judgment."}</p>
+      {!open && <div className="btnrow"><button className="btn sm" onClick={() => setOpen(true)}>Check in</button></div>}
+      {open && (
+        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10 }}>
+            <div className="field"><label>Weight (lb)</label><input className="input" value={weight} onChange={(e)=>setWeight(e.target.value)} placeholder="159.2" /></div>
+            {isSun && <div className="field"><label>Waist (in)</label><input className="input" value={waist} onChange={(e)=>setWaist(e.target.value)} placeholder="31.5" /></div>}
+            {isSun && <div className="field"><label>Week felt</label><input className="input" value={feel} onChange={(e)=>setFeel(e.target.value)} placeholder="strong / flat / beat up" /></div>}
+          </div>
+          {isSun && <div className="field"><label>Anything the trainer should know?</label><input className="input" value={note} onChange={(e)=>setNote(e.target.value)} placeholder="knee good; hungry all week; intervals felt easier..." /></div>}
+          <div className="btnrow">
+            <button className="btn primary sm" onClick={() => { if (isSun) actions.logWeeklyCheckin(today, { bodyweight: weight, waist, knee: state.settings.knee, feel, note }); else if (weight.trim()) actions.logMetric("bodyweight", Number(weight), today); setOpen(false); setWeight(""); setWaist(""); setFeel(""); setNote(""); }}>Save</button>
+            <button className="btn subtle sm" onClick={() => setOpen(false)}>Later</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CalibrationSettingsSection({ state, actions }) {
+  const calibratedWeights = Object.values(state.exercises).filter((ex) => ex.cal && ex.weight != null).length;
+  const totalWeights = Object.values(state.exercises).filter((ex) => ex.cal).length;
+  const baselineDone = CAL_BASELINES.filter((b) => String(state.calibration.values[b.key] || "").trim()).length;
+  const pct = Math.round(100 * (calibratedWeights + baselineDone) / Math.max(1, totalWeights + CAL_BASELINES.length));
+  const groups = [["A","Upper anchor"],["B","Lower anchor"],["C","Pull / power anchor"],["D","Athletic microdose"]];
+  return (
+    <div className="card">
+      <div className="eyebrow">Calibration & Baselines · {pct}% learned</div>
+      <p className="small dim" style={{ marginTop: 6 }}>This is not a separate combine you have to finish. Your first real workouts teach the trainer your working loads and tolerances. Use this section only to review or correct what it has learned.</p>
+      <Collapse title="Baseline measurements">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 10 }}>
+          {CAL_BASELINES.map((b) => <div className="field" key={b.key}><label>{b.label}{b.unit ? " · " + b.unit : ""}</label><input className="input" value={state.calibration.values[b.key] || ""} placeholder={b.seed || ""} onChange={(e)=>actions.saveCalValue(b.key,e.target.value)} /></div>)}
+        </div>
+      </Collapse>
+      <Collapse title="Working weights learned so far">
+        {groups.map(([g,label]) => {
+          const list = Object.entries(state.exercises).filter(([,ex]) => ex.group===g && ex.cal && !ex.bw);
+          if (!list.length) return null;
+          return <div key={g} style={{ marginTop: 10 }}><div className="small" style={{ color:"var(--ice)", fontWeight:700 }}>{label}</div>{list.map(([id,ex]) => <div className="exrow" key={id}><div><div className="exname">{ex.name}</div><div className="exmeta">{ex.weight==null ? "learning" : "current working load"}</div></div><div style={{display:"flex",gap:6,alignItems:"center"}}><input className="input" style={{width:84}} value={ex.weight==null?"":ex.weight} placeholder="—" onChange={(e)=>{const v=e.target.value.trim(); actions.setExerciseWeight(id,v===""?null:Number(v));}} /><span className="small faint">{ex.unit}</span></div></div>)}</div>;
+        })}
+      </Collapse>
+    </div>
+  );
+}
+
 /* ----------------------------- SETTINGS VIEW ----------------------------- */
 
 function SettingsView({ state, actions }) {
@@ -3089,6 +3210,7 @@ function SettingsView({ state, actions }) {
   const askNotif = () => { try { if (typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission(); } catch (e) {} };
   return (
     <div>
+      <CalibrationSettingsSection state={state} actions={actions} />
       <div className="card">
         <div className="eyebrow">Default availability · minutes per weekday</div>
         <p className="small dim" style={{ marginTop: 6 }}>New job, new hours? Change these and every future week re-plans itself. 0 = no training window that day.</p>
@@ -3117,7 +3239,7 @@ function SettingsView({ state, actions }) {
       <div className="card">
         <div className="eyebrow"><MessageCircle size={11} style={{ verticalAlign: "-1px" }} /> AI Coach</div>
         <p className="small dim" style={{ marginTop: 6 }}>
-          The chat button (bottom-right) logs sessions, weights, food, goal changes and recalculations from plain English. Inside Claude it runs on a built-in Claude model — zero setup, no key. Self-hosting later? Switch to your own OpenAI key below and it just works.
+          The chat button is the trainer input: workouts, food, water, recovery, goals, pain, time changes and weekly check-ins can all arrive as normal text. For the deployed app, use one server-side trainer endpoint so no model API key ever lives in the browser.
         </p>
         <div className="chips" style={{ marginTop: 12 }}>
           <button className={"chip" + (state.settings.aiProvider === "claude" ? " active" : "")} onClick={() => actions.setAIProvider("claude")}>Built-in Claude (no key)</button>
@@ -3369,6 +3491,12 @@ function runCoachActions(list, ctx) {
         }
       } else if (a.type === "log_food") {
         if (a.text) { actions.logFood(date, String(a.text).slice(0, 200)); out.push("✓ fuel note saved"); }
+      } else if (a.type === "log_water") {
+        const oz = Number(a.ounces); if (Number.isFinite(oz) && oz > 0) { actions.logWater(date, oz, "coach"); out.push("✓ water " + oz + " oz saved"); }
+      } else if (a.type === "log_recovery") {
+        actions.logRecovery(date, { sleepHours: a.sleep_hours == null ? null : Number(a.sleep_hours), sleepScore: a.sleep_score == null ? null : Number(a.sleep_score), feel: a.feel || "", note: a.note || "" }); out.push("✓ recovery note saved");
+      } else if (a.type === "weekly_checkin") {
+        actions.logWeeklyCheckin(date, { bodyweight: a.bodyweight, waist: a.waist, knee: a.knee, feel: a.feel, note: a.note }); out.push("✓ weekly check-in saved");
       } else if (a.type === "set_goal") {
         const ov = goalTargetToOverride(a.key, a.target);
         if (ov) { actions.setGoalOverride(a.key, ov); out.push("✓ goal " + a.key + " → " + ov.label); }
@@ -3424,21 +3552,21 @@ function CoachDrawer({ open, onClose, state, actions, plan, today }) {
     }
     setBusy(false);
   };
-  const quick = ["I finished today's workout", "I only did 15 minutes", "That was too hard — adjust my week", "That was too easy", "Skip today — no time", "Log what I ate"];
+  const quick = ["I finished today's workout", "I only did 15 minutes", "That was too hard — adjust my week", "That was too easy", "I drank 24 oz", "Weekly check-in"];
   return (
     <div className="drawer">
       <div className="drawer-head">
         <MessageCircle size={16} color="var(--accent)" />
         <div>
           <div style={{ fontWeight: 750, fontSize: 14 }}>Coach</div>
-          <div className="small faint">{state.settings.aiProvider === "openai" && state.settings.openaiKey ? "Your OpenAI key · falls back to built-in" : "Built-in Claude · no key needed"}</div>
+          <div className="small faint">{state.settings.coachEndpoint ? "Trainer endpoint connected" : "Local demo coach until server endpoint is connected"}</div>
         </div>
         <button className="btn subtle sm" style={{ marginLeft: "auto" }} onClick={onClose}><X size={14} /></button>
       </div>
       <div className="drawer-msgs" ref={scrollRef}>
         {state.chat.length === 0 && (
           <div className="bub coach">
-            Talk to me like a training partner:{"\n"}· "only did bench + pull-ups — 15 minutes"{"\n"}· "that was brutal; hamstrings are cooked, adjust my week"{"\n"}· "30 lb curls were way too easy"{"\n"}· "RDL hurt, remove it from the rest of today"{"\n"}· "ate chicken, rice + a shake"
+            Talk to me like a training partner:{"\n"}· "only did bench + pull-ups — 15 minutes"{"\n"}· "that was brutal; hamstrings are cooked, adjust my week"{"\n"}· "30 lb curls were way too easy"{"\n"}· "RDL hurt, remove it from the rest of today"{"\n"}· "ate chicken, rice + a shake"{"\n"}· "drank 24 oz"{"\n"}· "159.2 this morning; waist 31.5; felt strong this week"
           </div>
         )}
         {state.chat.map((m, i) => (
@@ -3552,7 +3680,7 @@ function OnboardingWizard({ actions }) {
   );
 }
 
-const TABS = ["TODAY", "ROADMAP", "PROGRAM", "PERFORMANCE", "CALIBRATION", "SETTINGS"];
+const TABS = ["TODAY", "ROADMAP", "PROGRAM", "PERFORMANCE", "SETTINGS"];
 
 export default function CornerbackApp() {
   const [state, setState] = useAppState();
