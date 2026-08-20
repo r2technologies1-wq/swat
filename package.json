@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "predev": "python scripts/pr3_current_main_patch.py",
+    "predev": "python scripts/pr3_current_main_patch.py && python scripts/pr3_visibility_fix.py",
     "dev": "vite",
-    "prebuild": "python scripts/pr3_current_main_patch.py",
+    "prebuild": "python scripts/pr3_current_main_patch.py && python scripts/pr3_visibility_fix.py",
     "build": "vite build",
     "preview": "vite preview"
   },
