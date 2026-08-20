@@ -26,6 +26,21 @@ function getPool() {
   return pool;
 }
 
+export async function checkDatabaseConnection() {
+  const db = getPool();
+  if (!db) return { configured: false, reachable: false };
+  try {
+    await db.query("SELECT 1");
+    return { configured: true, reachable: true };
+  } catch (error) {
+    return {
+      configured: true,
+      reachable: false,
+      error: error instanceof Error ? error.message : "database unavailable",
+    };
+  }
+}
+
 function asDate(value, fallback) {
   const raw = String(value || fallback || "").slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
@@ -54,6 +69,33 @@ function actionDate(action, fallbackDate) {
 
 function actionText(action) {
   return asText(action.text || action.note || action.notes || action.reason || action.context || "", 800);
+}
+
+function valueOfJson(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value === "string") {
+    try { return JSON.parse(value); } catch (_) { return fallback; }
+  }
+  return value;
+}
+
+function tsMs(value) {
+  const t = value ? new Date(value).getTime() : Date.now();
+  return Number.isFinite(t) ? t : Date.now();
+}
+
+function numOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function snapTierForMinutes(value) {
+  const mins = Number(value);
+  if (!Number.isFinite(mins)) return null;
+  if (mins <= 15) return 15;
+  if (mins <= 25) return 25;
+  if (mins <= 40) return 40;
+  return 60;
 }
 
 async function ensureAthlete(client, athleteKey) {
@@ -184,6 +226,237 @@ export async function loadTrainerContext({ athleteKey } = {}) {
       loaded: false,
       error: error instanceof Error ? error.message : "database context unavailable",
       prompt: "",
+    };
+  } finally {
+    client.release();
+  }
+}
+
+function dayOverrideFromRow(row) {
+  const patch = valueOfJson(row.patch, {});
+  const type = row.override_type || patch.type;
+  const out = {};
+  if (type === "set_day_time" || type === "set_today_time") {
+    const minutes = numOrNull(patch.minutes || patch.availableMinutes);
+    if (minutes != null) {
+      out.availableMinutes = minutes;
+      out.tier = snapTierForMinutes(minutes);
+      out.reason = row.reason || patch.reason || "Hydrated time window from trainer memory.";
+    }
+  }
+  if (type === "set_day_constraints") {
+    out.constraints = {
+      travel: !!patch.travel,
+      noGym: !!(patch.noGym || patch.no_gym),
+      noEquipment: !!(patch.noEquipment || patch.no_equipment),
+    };
+    out.reason = row.reason || patch.note || "Hydrated day constraint from trainer memory.";
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+export async function loadTrainerSnapshot({ athleteKey } = {}) {
+  const db = getPool();
+  if (!db) return { configured: false, hydrated: false, state: null };
+  const client = await db.connect();
+  try {
+    const athlete = await ensureAthlete(client, athleteKey);
+    const [
+      memories,
+      events,
+      food,
+      water,
+      recovery,
+      metrics,
+      sessions,
+      feedback,
+      overrides,
+    ] = await Promise.all([
+      client.query(
+        `SELECT memory_key, text, confidence, last_seen_at
+         FROM trainer_memories
+         WHERE athlete_id = $1 AND active = true
+         ORDER BY last_seen_at ASC
+         LIMIT 120`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT id, event_type, occurred_on, occurred_at, body_area, severity, active, context, text, data, source, created_at
+         FROM trainer_events
+         WHERE athlete_id = $1
+         ORDER BY created_at ASC
+         LIMIT 500`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT log_date, text, created_at
+         FROM nutrition_logs
+         WHERE athlete_id = $1
+         ORDER BY created_at ASC
+         LIMIT 120`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT log_date, ounces, source, created_at
+         FROM hydration_logs
+         WHERE athlete_id = $1
+         ORDER BY created_at ASC
+         LIMIT 240`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT log_date, sleep_hours, sleep_score, feel, note, source, created_at
+         FROM recovery_logs
+         WHERE athlete_id = $1
+         ORDER BY created_at ASC
+         LIMIT 120`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT kind, value_num, value_text, unit, measured_on, created_at
+         FROM body_metrics
+         WHERE athlete_id = $1
+         ORDER BY created_at ASC
+         LIMIT 300`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT workout_date, session_key, status, duration_minutes, feel, session_rpe, completion_fraction, exercises_completed, exercises_skipped, notes, data, created_at
+         FROM workout_sessions
+         WHERE athlete_id = $1
+         ORDER BY created_at ASC
+         LIMIT 180`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT feedback_date, exercise_name, difficulty, actual_weight, observed_rir, next_weight, note, created_at
+         FROM exercise_feedback
+         WHERE athlete_id = $1
+         ORDER BY created_at ASC
+         LIMIT 180`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT override_date, override_type, reason, patch, created_at
+         FROM day_overrides
+         WHERE athlete_id = $1 AND active = true
+         ORDER BY created_at ASC
+         LIMIT 180`,
+        [athlete.id],
+      ),
+    ]);
+
+    const snapshot = {
+      trainerMemory: {
+        facts: memories.rows.map((m) => ({
+          key: m.memory_key || String(m.text || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 80),
+          text: m.text,
+          date: String(m.last_seen_at || "").slice(0, 10),
+          confidence: numOrNull(m.confidence),
+          ts: tsMs(m.last_seen_at),
+          source: "postgres",
+        })),
+      },
+      athleteEvents: events.rows.map((e) => ({
+        id: String(e.id),
+        date: e.occurred_on ? String(e.occurred_on).slice(0, 10) : String(e.created_at).slice(0, 10),
+        occurredAt: e.occurred_at ? new Date(e.occurred_at).toISOString() : e.occurred_on ? String(e.occurred_on).slice(0, 10) : String(e.created_at).slice(0, 10),
+        reportedAt: tsMs(e.created_at),
+        source: e.source || "postgres",
+        eventType: e.event_type || "note",
+        bodyArea: e.body_area || "",
+        severity: numOrNull(e.severity),
+        active: e.active == null ? null : !!e.active,
+        context: e.context || "",
+        text: e.text || "",
+        data: valueOfJson(e.data, {}),
+      })),
+      nutrition: food.rows.map((n) => ({
+        date: n.log_date ? String(n.log_date).slice(0, 10) : String(n.created_at).slice(0, 10),
+        text: n.text || "",
+        ts: tsMs(n.created_at),
+        source: "postgres",
+      })),
+      hydration: water.rows.map((h) => ({
+        date: h.log_date ? String(h.log_date).slice(0, 10) : String(h.created_at).slice(0, 10),
+        ounces: numOrNull(h.ounces),
+        source: h.source || "postgres",
+        ts: tsMs(h.created_at),
+      })).filter((h) => h.ounces != null),
+      recoveryLog: recovery.rows.map((r) => ({
+        date: r.log_date ? String(r.log_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+        sleepHours: numOrNull(r.sleep_hours),
+        sleepScore: numOrNull(r.sleep_score),
+        feel: r.feel || "",
+        note: r.note || "",
+        source: r.source || "postgres",
+        ts: tsMs(r.created_at),
+      })),
+      metrics: { bodyweight: [], waist: [], pullupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
+      log: sessions.rows.map((s) => ({
+        date: s.workout_date ? String(s.workout_date).slice(0, 10) : String(s.created_at).slice(0, 10),
+        sessionId: s.session_key || null,
+        status: s.status || "completed",
+        duration: numOrNull(s.duration_minutes),
+        feel: s.feel || null,
+        sessionRpe: numOrNull(s.session_rpe),
+        completionFraction: numOrNull(s.completion_fraction),
+        exercisesCompleted: valueOfJson(s.exercises_completed, []),
+        exercisesSkipped: valueOfJson(s.exercises_skipped, []),
+        note: s.notes || "",
+        data: valueOfJson(s.data, {}),
+        ts: tsMs(s.created_at),
+        source: "postgres",
+      })),
+      coachMemory: { observations: [] },
+      dayWorkoutOverrides: {},
+      dayFlags: {},
+    };
+
+    metrics.rows.forEach((m) => {
+      const date = m.measured_on ? String(m.measured_on).slice(0, 10) : String(m.created_at).slice(0, 10);
+      const raw = m.value_num == null ? m.value_text : m.value_num;
+      const numeric = numOrNull(raw);
+      if (m.kind === "bodyweight" && numeric != null) snapshot.metrics.bodyweight.push({ date, v: numeric, ts: tsMs(m.created_at), source: "postgres" });
+      else if (m.kind === "waist" && numeric != null) snapshot.metrics.waist.push({ date, v: numeric, ts: tsMs(m.created_at), source: "postgres" });
+      else if (m.kind === "pullup" && numeric != null) snapshot.metrics.pullupBest.push({ date, v: numeric, ts: tsMs(m.created_at), source: "postgres" });
+      else if (m.kind === "mile" && raw != null) snapshot.metrics.mileBest = raw;
+      else if (m.kind === "fiveK" && raw != null) snapshot.metrics.fiveKBest = raw;
+      else if (m.kind === "muscleUp") snapshot.metrics.muscleUp = Boolean(raw);
+    });
+
+    feedback.rows.forEach((f) => {
+      const date = f.feedback_date ? String(f.feedback_date).slice(0, 10) : String(f.created_at).slice(0, 10);
+      const weight = f.actual_weight == null ? "" : " at " + f.actual_weight + " lb";
+      const next = f.next_weight == null ? "" : "; next load " + f.next_weight;
+      snapshot.coachMemory.observations.push({
+        date,
+        text: (f.exercise_name || "Exercise") + " felt " + (f.difficulty || "noted") + weight + next + (f.note ? " — " + f.note : ""),
+        ts: tsMs(f.created_at),
+        source: "postgres",
+      });
+    });
+
+    overrides.rows.forEach((row) => {
+      const date = row.override_date ? String(row.override_date).slice(0, 10) : null;
+      if (!date) return;
+      if (row.override_type === "flag_exhausted") snapshot.dayFlags[date] = "exhausted";
+      const patch = dayOverrideFromRow(row);
+      if (patch) snapshot.dayWorkoutOverrides[date] = { ...(snapshot.dayWorkoutOverrides[date] || {}), ...patch };
+    });
+
+    return {
+      configured: true,
+      hydrated: true,
+      athlete: { id: athlete.id, externalKey: athlete.external_key, displayName: athlete.display_name },
+      state: snapshot,
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      hydrated: false,
+      error: error instanceof Error ? error.message : "database hydration failed",
+      state: null,
     };
   } finally {
     client.release();

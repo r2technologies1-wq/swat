@@ -2762,6 +2762,75 @@ function mergeState(def, saved) {
   return out;
 }
 
+function mergeArrayByKey(localList, remoteList, keyFn, max) {
+  const map = new Map();
+  (Array.isArray(remoteList) ? remoteList : []).forEach((item) => {
+    const key = keyFn(item);
+    if (key) map.set(key, item);
+  });
+  (Array.isArray(localList) ? localList : []).forEach((item) => {
+    const key = keyFn(item);
+    if (key) map.set(key, item);
+  });
+  return Array.from(map.values())
+    .sort((a, b) => Number(a.ts || a.reportedAt || 0) - Number(b.ts || b.reportedAt || 0))
+    .slice(-(max || 120));
+}
+
+function mergeMetricRows(localList, remoteList) {
+  return mergeArrayByKey(localList, remoteList, (x) => String(x.date || "") + ":" + String(x.v), 240);
+}
+
+function mergePostgresHydration(state, snapshot) {
+  if (!state || !snapshot || typeof snapshot !== "object") return state;
+  const trainerFacts = mergeArrayByKey(
+    ((state.trainerMemory || {}).facts) || [],
+    ((snapshot.trainerMemory || {}).facts) || [],
+    (x) => x.key || (String(x.date || "") + ":" + String(x.text || "").slice(0, 120)),
+    120,
+  );
+  const coachObs = mergeArrayByKey(
+    ((state.coachMemory || {}).observations) || [],
+    ((snapshot.coachMemory || {}).observations) || [],
+    (x) => String(x.date || "") + ":" + String(x.text || "").slice(0, 160),
+    120,
+  );
+  const metrics = {
+    ...state.metrics,
+    bodyweight: mergeMetricRows((state.metrics || {}).bodyweight, (snapshot.metrics || {}).bodyweight),
+    waist: mergeMetricRows((state.metrics || {}).waist, (snapshot.metrics || {}).waist),
+    pullupBest: mergeMetricRows((state.metrics || {}).pullupBest, (snapshot.metrics || {}).pullupBest),
+    mileBest: (state.metrics || {}).mileBest || (snapshot.metrics || {}).mileBest || null,
+    fiveKBest: (state.metrics || {}).fiveKBest || (snapshot.metrics || {}).fiveKBest || null,
+    muscleUp: !!((state.metrics || {}).muscleUp || (snapshot.metrics || {}).muscleUp),
+  };
+  return {
+    ...state,
+    trainerMemory: { facts: trainerFacts },
+    coachMemory: { observations: coachObs },
+    athleteEvents: mergeArrayByKey(state.athleteEvents, snapshot.athleteEvents, (x) => x.id || (String(x.occurredAt || x.date || "") + ":" + String(x.eventType || "") + ":" + String(x.text || "").slice(0, 120)), 500),
+    nutrition: mergeArrayByKey(state.nutrition, snapshot.nutrition, (x) => String(x.date || "") + ":" + String(x.text || "").slice(0, 160), 120),
+    hydration: mergeArrayByKey(state.hydration, snapshot.hydration, (x) => String(x.date || "") + ":" + String(x.ounces || "") + ":" + String(x.ts || ""), 240),
+    recoveryLog: mergeArrayByKey(state.recoveryLog, snapshot.recoveryLog, (x) => String(x.date || "") + ":" + String(x.sleepHours || "") + ":" + String(x.note || "").slice(0, 120), 120),
+    log: mergeArrayByKey(state.log, snapshot.log, (x) => String(x.date || "") + ":" + String(x.sessionId || "") + ":" + String(x.status || "") + ":" + String(x.ts || ""), 240),
+    metrics,
+    dayWorkoutOverrides: { ...((snapshot || {}).dayWorkoutOverrides || {}), ...(state.dayWorkoutOverrides || {}) },
+    dayFlags: { ...((snapshot || {}).dayFlags || {}), ...(state.dayFlags || {}) },
+    ui: { ...state.ui, postgresHydratedAt: Date.now() },
+  };
+}
+
+async function loadPostgresHydration() {
+  try {
+    const r = await fetch("/api/trainer/state?athleteKey=local-demo", { cache: "no-store" });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d && d.hydrated && d.state ? d.state : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function useAppState() {
   const [state, setState] = useState(null);
   const loadedRef = useRef(false);
@@ -2769,8 +2838,13 @@ function useAppState() {
     let alive = true;
     StorageAdapter.load(STORE_KEY).then((saved) => {
       if (!alive) return;
-      setState(mergeState(freshDefaultState(), saved));
+      const local = mergeState(freshDefaultState(), saved);
+      setState(local);
       loadedRef.current = true;
+      loadPostgresHydration().then((snapshot) => {
+        if (!alive || !snapshot) return;
+        setState((prev) => mergePostgresHydration(prev, snapshot));
+      });
     });
     return () => { alive = false; };
   }, []);
@@ -3180,6 +3254,12 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 .chip{appearance:none;border:1px solid var(--line2);background:none;color:var(--dim);padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:650;cursor:pointer;font-family:var(--mono)}
 .chip:hover{color:var(--text)}
 .chip.active{background:var(--accent);border-color:var(--accent);color:#0A0E15}
+.statusline{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.statuspill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:999px;padding:4px 9px;font-family:var(--mono);font-size:10.5px;color:var(--dim);white-space:nowrap}
+.statuspill.good{color:var(--good);border-color:rgba(67,201,138,.35)}
+.statuspill.warn{color:var(--warn);border-color:rgba(223,174,79,.42)}
+.statuspill.bad{color:var(--bad);border-color:rgba(217,107,107,.42)}
+.statusdot{width:6px;height:6px;border-radius:999px;background:currentColor;box-shadow:0 0 12px currentColor}
 .bar{height:5px;background:var(--raise);border-radius:3px;overflow:hidden;position:relative}
 .barfill{height:100%;background:var(--accent);border-radius:3px;transition:width .4s ease}
 .barfill.full{background:var(--good)}
@@ -4880,6 +4960,49 @@ function CalibrationSettingsSection({ state, actions }) {
 
 /* ----------------------------- SETTINGS VIEW ----------------------------- */
 
+function TrainerBackendStatus({ compact = false }) {
+  const [health, setHealth] = useState({ loading: true, backend: false, openai: false, databaseConfigured: false, databaseReachable: false });
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await fetch("/api/health", { cache: "no-store" });
+        if (!r.ok) throw new Error("health " + r.status);
+        const d = await r.json();
+        if (!cancelled) {
+          setHealth({
+            loading: false,
+            backend: true,
+            openai: !!d.openai,
+            databaseConfigured: !!d.databaseConfigured,
+            databaseReachable: !!(d.databaseReachable || d.database),
+            databaseError: d.databaseError || "",
+          });
+        }
+      } catch (e) {
+        if (!cancelled) setHealth({ loading: false, backend: false, openai: false, databaseConfigured: false, databaseReachable: false });
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const backendClass = health.loading ? "" : health.backend ? " good" : " bad";
+  const aiClass = health.openai ? " good" : " warn";
+  const dbClass = health.databaseReachable ? " good" : health.databaseConfigured ? " bad" : " warn";
+  const backendText = health.loading ? "checking" : health.backend ? "backend on" : "backend off";
+  const aiText = health.openai ? "AI on" : "AI key missing";
+  const dbText = health.databaseReachable ? "DB on" : health.databaseConfigured ? "DB unreachable" : "DB secret missing";
+
+  return (
+    <div className="statusline" style={compact ? { marginTop: 3 } : null} title={health.databaseError || ""}>
+      <span className={"statuspill" + backendClass}><span className="statusdot" />{backendText}</span>
+      <span className={"statuspill" + aiClass}><span className="statusdot" />{compact ? (health.openai ? "AI" : "no AI") : aiText}</span>
+      <span className={"statuspill" + dbClass}><span className="statusdot" />{compact ? (health.databaseReachable ? "DB" : "no DB") : dbText}</span>
+    </div>
+  );
+}
+
 function SettingsView({ state, actions }) {
   const [importText, setImportText] = useState("");
   const [showExport, setShowExport] = useState(false);
@@ -4920,6 +5043,7 @@ function SettingsView({ state, actions }) {
         <p className="small dim" style={{ marginTop: 6 }}>
           Chat is the primary input. Messages become structured events, current state, and durable trainer memory. The model itself does not learn; the app saves the useful facts and includes them in the next trainer context.
         </p>
+        <TrainerBackendStatus />
         <div className="field" style={{ marginTop: 12 }}>
           <label>Trainer endpoint</label>
           <input className="input" placeholder="/api/trainer" value={state.settings.coachEndpoint || "/api/trainer"} onChange={(e) => actions.setCoachEndpoint(e.target.value)} />
@@ -5277,7 +5401,7 @@ function CoachDrawer({ open, onClose, state, actions, plan, today }) {
         <MessageCircle size={16} color="var(--accent)" />
         <div>
           <div style={{ fontWeight: 750, fontSize: 14 }}>Trainer</div>
-          <div className="small faint">{state.settings.coachEndpoint ? "Cloud endpoint when available · local memory fallback always on" : "Local memory fallback"}</div>
+          <TrainerBackendStatus compact />
         </div>
         <button className="btn subtle sm" style={{ marginLeft: "auto" }} onClick={onClose}><X size={14} /></button>
       </div>
