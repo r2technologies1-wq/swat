@@ -195,7 +195,12 @@ const EXERCISE_DEFAULTS = {
   farmer:    { name: "Farmer carry",                   weight: null, inc: 10, unit: "lb/hand", cal: true, group: "D" },
   ssRdl:     { name: "DB split-stance RDL",            weight: null, inc: 5,  unit: "lb", cal: true,  group: "D" },
   pushup:    { name: "Push-up",                        weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
+  microRun:  { name: "Fast mile / hard run micro-dose", weight: 0,   inc: 0,  unit: "time", cal: false, bw: true, group: "MIX" },
   abWheel:   { name: "Ab wheel / dead bug",            weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
+  snapDown:  { name: "Snap-down to athletic stance",    weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
+  lowPogo:   { name: "Low pogo contacts",               weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
+  broadJumpDrill: { name: "Broad jump + stick",          weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
+  jumpReach: { name: "Vertical jump / max-reach practice", weight: 0, inc: 0, unit: "bw", cal: false, bw: true, group: "D" },
   easyAerobic20: { name: "Easy aerobic add-on",          weight: 0,    inc: 0,  unit: "15–20 min", cal: false, bw: true, group: "MIX" },
 };
 
@@ -400,6 +405,21 @@ const SESSIONS = {
     stress: { push: 0, pull: 0, lower: 1, run: 1, hard: false },
     minMinutes: 25,
   },
+  MICRORUN: {
+    id: "MICRORUN", slot: "QR1", name: "Adaptive Micro-Dose — Fast Run", short: "Micro Run",
+    kind: "run", required: false, tone: "run", adaptive: true,
+    desc: "6–14 minute constraint session. It gives the mile/5K path a useful signal without pretending to be a full quality-running day.",
+    contrib: {}, stress: { push: 0, pull: 0, lower: 1, run: 2, hard: false },
+    minMinutes: 6,
+  },
+  MICRO: {
+    id: "MICRO", slot: "MICRO", name: "Adaptive Micro-Dose", short: "Micro-dose",
+    kind: "strength", required: false, tone: "optional", adaptive: true,
+    desc: "6–14 minute constraint session. The trainer preserves one useful Dec 31 stimulus instead of treating a short day as a failed full workout.",
+    contrib: {}, stress: { push: 0, pull: 0, lower: 0, run: 0, hard: false },
+    minMinutes: 6,
+    variants: { 15: [] },
+  },
   MOB: {
     id: "MOB", slot: "MOB", name: "Mobility / Core Reset", short: "Mobility",
     kind: "recovery", required: false, tone: "recovery",
@@ -492,7 +512,7 @@ const SESSIONS = {
       ["tibRaise", "2 × 15–20", "Controlled reps"],
       ["stepUp", "2 easy test sets", "Pain-free tolerance check only · do not force it"],
     ] },
-    calKeys: ["rdl", "hipThrust", "hamCurl", "calfRaise", "tibRaise", "stepUp", "broadJump"],
+    calKeys: ["rdl", "hipThrust", "hamCurl", "calfRaise", "tibRaise", "stepUp", "broadJump", "verticalJump"],
   },
   CAL_TRACK: {
     id: "CAL_TRACK", slot: "CAL_TRACK", name: "Combine 3 — Track Measure + Easy Run", short: "Combine · Track",
@@ -545,6 +565,9 @@ const SESSIONS = {
     minMinutes: 0,
   },
 };
+
+const CAL_CORE_IDS = ["CAL_UP", "CAL_LOW", "CAL_TRACK"];
+const CAL_OPTIONAL_IDS = ["CAL_ACCA", "CAL_ACCC"];
 
 /* Weekly training budget — September (V3). Later months adjust at review. */
 const BUDGET_DEF = [
@@ -632,6 +655,7 @@ const GOALS = [
   { key: "bw",     label: "Bodyweight",  start: "~158 lb", target: "163–168 lean", unit: "lb", bandLo: 163, bandHi: 168, startVal: 158 },
   { key: "abs",    label: "Physique",    start: "Lean baseline", target: "Clear abdominal definition", unit: "note" },
   { key: "speed",  label: "Speed / agility", start: "Baseline TBD", target: "Meaningful gain, knee intact", unit: "note" },
+  { key: "vertical", label: "Vertical / dunk", start: "Baseline TBD", target: "Meaningful vertical gain + progress toward dunking", unit: "note" },
 ];
 
 /* Combine checklist item metadata (non-exercise entries) */
@@ -647,6 +671,7 @@ const CAL_BASELINES = [
   { key: "trackLaps",    label: "Track laps per mile", unit: "laps", seed: "" },
   { key: "trackStraight",label: "Usable straight length", unit: "yd", seed: "" },
   { key: "broadJump",    label: "Broad jump (only if pain-free)", unit: "in", seed: "" },
+  { key: "verticalJump",  label: "Vertical jump / max-touch baseline (when knee has earned it)", unit: "in / landmark", seed: "" },
 ];
 const CAL_RULE = "Choose a conservative load. Perform the low end of the rep range. Right weight leaves ~2–3 clean reps in reserve. 5+ left → go up. 0–1 left → come down. Never calibrate to failure.";
 
@@ -693,6 +718,7 @@ function mergeDayOverrides(autoOverride, userOverride) {
   const a = autoOverride || {};
   const u = userOverride || {};
   const rem = Array.from(new Set([...(a.remove || []), ...(u.remove || [])]));
+  const userRemove = Array.from(new Set([...(a.userRemove || []), ...(u.userRemove || []), ...(u.remove || [])]));
   const seen = new Set();
   const add = [...(a.add || []), ...(u.add || [])].filter((x) => {
     const id = x && x.id ? x.id : Array.isArray(x) ? x[0] : null;
@@ -702,11 +728,54 @@ function mergeDayOverrides(autoOverride, userOverride) {
   return {
     ...a, ...u,
     tier: u.tier || a.tier,
+    availableMinutes: u.availableMinutes != null ? u.availableMinutes : a.availableMinutes,
+    constraints: { ...(a.constraints || {}), ...(u.constraints || {}) },
     remove: rem,
+    userRemove,
     add,
     runOverride: u.runOverride || a.runOverride,
     reason: [a.reason, u.reason].filter(Boolean).join(" "),
     modules: [...(a.modules || []), ...(u.modules || [])],
+  };
+}
+
+function resizeGoalOverrideForTier(autoOverride, tier, state) {
+  if (!autoOverride || !Array.isArray(autoOverride.modules) || !autoOverride.modules.length) return autoOverride;
+  const target = Number(tier || autoOverride.tier || 60);
+  const modules = autoOverride.modules.map((key) => PR5_MODULES[key]).filter(Boolean);
+  if (!modules.length) return autoOverride;
+  const selected = [];
+  let used = 0;
+  modules.forEach((m) => {
+    if (!selected.length) {
+      selected.push(m); used += m.minutes; return;
+    }
+    const first = selected[0];
+    const tinyUpperPartner = target <= 15 && first.family === "upper" && m.family === "upper" && selected.length < 2;
+    if (tinyUpperPartner || used + m.minutes <= target) {
+      selected.push(m); used += m.minutes;
+    }
+  });
+  const stage = cbStageFor(state.settings.knee, state.settings.skillStage);
+  const seen = new Set();
+  const add = [];
+  const moduleMinutes = target <= 15 ? 15 : Math.max(15, Math.floor(target / Math.max(1, selected.length)));
+  selected.forEach((m) => {
+    if (autoOverride.runOverride && m.key === "easyAerobic") return;
+    pr5ModuleRows(m.key, moduleMinutes, stage, state, autoOverride.date, { modules: selected.map((x) => x.key), variantSalt: "resize" }).forEach((r) => {
+    if (seen.has(r[0])) return;
+    seen.add(r[0]);
+    add.push({ id: r[0], sr: r[1], note: r[2] });
+    });
+  });
+  if (!add.length) return autoOverride;
+  const resized = target < Number(autoOverride.tier || 60);
+  return {
+    ...autoOverride,
+    tier: target,
+    add,
+    modules: selected.map((m) => m.key),
+    reason: autoOverride.reason + (resized ? " Resized to the " + target + "-minute priority set." : ""),
   };
 }
 
@@ -726,6 +795,7 @@ const SESSION_FATIGUE_AREAS = {
   QR1: ["quads", "hamstrings", "glutes", "calves"], QR2: ["quads", "hamstrings", "glutes", "calves"],
   XT1: ["quads", "hamstrings", "glutes"], XT2: ["quads", "hamstrings", "glutes"],
   EASY: ["quads", "hamstrings", "calves"], EASYXT: ["quads", "hamstrings"],
+  MICRORUN: ["quads", "hamstrings", "glutes", "calves"], MICRO: ["core"],
 };
 
 const FATIGUE_AREAS = ["chest", "shoulders", "triceps", "back", "biceps", "quads", "hamstrings", "glutes", "calves", "core"];
@@ -948,13 +1018,13 @@ function weekBudgetState(log, ws) {
 
 function calibrationRemaining(log) {
   const doneSlots = new Set(log.filter((e) => e.status === "completed").map((e) => SLOT_OF[e.sessionId]));
-  return ["CAL_UP", "CAL_LOW", "CAL_TRACK", "CAL_ACCA", "CAL_ACCC"].filter((id) => !doneSlots.has(id));
+  return CAL_CORE_IDS.filter((id) => !doneSlots.has(id));
 }
 
 function weekTemplate(effPhase, log) {
   if (effPhase === "cal" || effPhase === "pre") {
     const undone = calibrationRemaining(log);
-    return { required: [...undone.slice(0, 3), "EASY"], optional: [], calMode: true };
+    return { required: [...undone.slice(0, 3), "EASY"], optional: CAL_OPTIONAL_IDS, calMode: true };
   }
   return { required: ["A", "QR1", "B", "C", "QR2", "EASY"], optional: ["D"], calMode: false };
 }
@@ -982,8 +1052,8 @@ function workloadPct(done) {
 function weekMessage(pct, skipped, calMode) {
   if (calMode) {
     return skipped > 0
-      ? "A missed combine day just moves — the baselines still get captured this week."
-      : "Combine week: capture baselines fresh. No heroics required.";
+      ? "A missed baseline day just moves — the core numbers still get captured without cramming."
+      : "Baseline week: capture the minimum useful numbers, then let normal workouts teach the rest.";
   }
   if (skipped > 0) return "You missed " + skipped + " day" + (skipped > 1 ? "s" : "") + ", but you are still " + pct + "% through this week's target workload. The plan already reflowed.";
   if (pct >= 100) return "Weekly target workload fully banked. Anything else is bonus.";
@@ -1022,7 +1092,7 @@ function buildReasons(slotId, rid, d, ctx2) {
   return r.slice(0, 3);
 }
 
-function planWeek(ctx) {
+function legacyPlanWeek(ctx) {
   const { today, log } = ctx;
   const settings = ctx.settings || {};
   const knee = ctx.knee || "good";
@@ -1074,6 +1144,8 @@ function planWeek(ctx) {
   }
 
   const avail = (d) => {
+    const dayOverride = (((ctx.state || {}).dayWorkoutOverrides) || {})[d] || {};
+    if (dayOverride.availableMinutes != null) return Number(dayOverride.availableMinutes) || 0;
     const wm = settings.weekdayMinutes || {};
     const v = wm[dowMon0(d)];
     return v == null ? 60 : v;
@@ -1253,6 +1325,811 @@ function planWeek(ctx) {
   };
 }
 
+
+/* PR5_GOAL_DRIVEN_SCHEDULER */
+/*
+  The Dec-31 outcomes are the objective. Weekly exposure targets are a derived
+  prescription, recalculated from goal progress, time remaining, actual work,
+  recovery and availability. A/B/C remain useful exercise templates/carriers;
+  they are not weekday identities.
+*/
+
+const PR5_STIMULI = {
+  pressStrength:   { label: "Press strength", family: "upper", min: 1, max: 2 },
+  verticalPull:    { label: "Vertical pull", family: "upper", min: 1, max: 2 },
+  horizontalPull:  { label: "Horizontal pull", family: "upper", min: 1, max: 2 },
+  lowerStrength:   { label: "Lower force", family: "lower", min: 1, max: 2 },
+  qualityRun:      { label: "Quality running", family: "runHard", min: 1, max: 2 },
+  easyAerobic:     { label: "Easy aerobic", family: "easy", min: 1, max: 2 },
+  explosivePull:   { label: "Explosive pull / MU", family: "upper", min: 1, max: 2 },
+  verticalPower:   { label: "Jump / vertical development", family: "lower", min: 0, max: 2 },
+  arms:            { label: "Direct arms", family: "accessory", min: 0, max: 2, optional: true },
+  core:            { label: "Core / trunk", family: "accessory", min: 1, max: 3 },
+  recovery:        { label: "Low-stress recovery", family: "recovery", min: 1, max: 1 },
+};
+
+const PR5_GOAL_MAP = {
+  bench:    { pressStrength: 1.55, horizontalPull: .25, core: .15 },
+  mile:     { qualityRun: 1.15, easyAerobic: .55, lowerStrength: .25, verticalPower: .30 },
+  fiveK:    { qualityRun: 1.20, easyAerobic: .85, lowerStrength: .20 },
+  pullup:   { verticalPull: 1.35, horizontalPull: .25, core: .10 },
+  mu:       { explosivePull: 1.45, verticalPull: .65, core: .15 },
+  bw:       { pressStrength: .20, verticalPull: .20, horizontalPull: .20, lowerStrength: .20, arms: .20 },
+  abs:      { core: .90, easyAerobic: .20, pressStrength: .10, verticalPull: .10 },
+  speed:    { verticalPower: 1.00, lowerStrength: .50, qualityRun: .45, core: .15 },
+  vertical: { verticalPower: 1.55, lowerStrength: .65, core: .20 },
+};
+
+const PR5_IMPORTANCE = {
+  bench: 1.05, mile: 1.08, fiveK: 1.12, pullup: .95, mu: 1.0,
+  bw: .58, abs: .55, speed: .78, vertical: .92,
+};
+
+const PR5_PHASE_MULT = {
+  sep: { pressStrength: .95, verticalPull: 1.0, horizontalPull: .90, lowerStrength: .95, qualityRun: 1.0, easyAerobic: 1.08, explosivePull: .92, verticalPower: .86, arms: .72, core: .95 },
+  oct: { pressStrength: 1.0, verticalPull: 1.0, horizontalPull: .92, lowerStrength: 1.0, qualityRun: 1.05, easyAerobic: .95, explosivePull: 1.05, verticalPower: 1.0, arms: .78, core: .92 },
+  nov: { pressStrength: 1.08, verticalPull: 1.02, horizontalPull: .88, lowerStrength: .92, qualityRun: 1.12, easyAerobic: .82, explosivePull: 1.14, verticalPower: 1.08, arms: .65, core: .85 },
+  dec: { pressStrength: .84, verticalPull: .80, horizontalPull: .62, lowerStrength: .62, qualityRun: .90, easyAerobic: .58, explosivePull: .90, verticalPower: .72, arms: .32, core: .55 },
+  post: {},
+};
+
+const PR5_STIMULUS_RULES = {
+  pressStrength: { keep: .30, build: .72, hard: true },
+  verticalPull: { keep: .30, build: .70, hard: true },
+  horizontalPull: { keep: .34, build: .78, hard: true },
+  lowerStrength: { keep: .34, build: .74, hard: true },
+  qualityRun: { keep: .34, build: .72, hard: true },
+  easyAerobic: { keep: .32, build: .76 },
+  explosivePull: { keep: .31, build: .68, hard: true },
+  verticalPower: { keep: .28, build: .62 },
+  arms: { keep: .44, build: .82, optional: true },
+  core: { keep: .38, build: .78 },
+};
+
+const PR5_EXERCISE_STIMULI = {
+  benchA: ["pressStrength"], benchC: ["pressStrength"], inclineDb: ["pressStrength"], ohp: ["pressStrength"], pushup: ["pressStrength"], mbThrow: ["pressStrength"],
+  pullup: ["verticalPull"], pulldown: ["verticalPull"],
+  csRow: ["horizontalPull"], cableRow1: ["horizontalPull"], facePull: ["horizontalPull"],
+  exPull: ["explosivePull", "verticalPull"], muTrans: ["explosivePull"],
+  rdl: ["lowerStrength"], hipThrust: ["lowerStrength"], hamCurl: ["lowerStrength"], stepUp: ["lowerStrength"], ssRdl: ["lowerStrength"],
+  snapDown: ["verticalPower"], lowPogo: ["verticalPower"], broadJumpDrill: ["verticalPower"], jumpReach: ["verticalPower"],
+  hammer: ["arms"], incCurl: ["arms"], pressdown: ["arms"], ohTri: ["arms"],
+  kneeRaise: ["core"], pallof: ["core"], abWheel: ["core"], farmer: ["core"], microRun: ["qualityRun"], easyAerobic20: ["easyAerobic"],
+};
+
+const PR5_EXERCISE_AREAS = {
+  benchA:["chest","shoulders","triceps"], benchC:["chest","shoulders","triceps"], inclineDb:["chest","shoulders","triceps"], ohp:["shoulders","triceps"], pushup:["chest","triceps"], mbThrow:["chest","shoulders","triceps"],
+  pullup:["back","biceps"], pulldown:["back","biceps"], csRow:["back","biceps"], cableRow1:["back","biceps"], facePull:["back","shoulders"], exPull:["back","biceps"], muTrans:["back","biceps"],
+  rdl:["hamstrings","glutes"], hipThrust:["glutes","hamstrings"], hamCurl:["hamstrings"], stepUp:["quads","glutes"], ssRdl:["hamstrings","glutes"],
+  snapDown:["quads","glutes","calves"], lowPogo:["calves"], broadJumpDrill:["quads","glutes","hamstrings","calves"], jumpReach:["quads","glutes","calves"],
+  hammer:["biceps"], incCurl:["biceps"], pressdown:["triceps"], ohTri:["triceps"], kneeRaise:["core"], pallof:["core"], abWheel:["core"], farmer:["core"], microRun:["quads","hamstrings","glutes","calves"], easyAerobic20:["quads","hamstrings","glutes","calves"],
+};
+
+function pr5Clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function pr5FirstNumber(v) {
+  if (v == null) return null;
+  const m = String(v).match(/\d+(?:\.\d+)?/);
+  return m ? Number(m[0]) : null;
+}
+function pr5EstimatedBench1RM(state) {
+  const ex = state.exercises && state.exercises.benchA;
+  let best = 0;
+  ((ex && ex.history) || []).forEach((h) => {
+    const w = Number(h.w || 0);
+    let reps = Number(h.reps);
+    if (!Number.isFinite(reps)) reps = pr5FirstNumber(h.reps);
+    if (w > 0) best = Math.max(best, reps > 0 ? w * (1 + reps / 30) : w);
+  });
+  const cal = state.calibration && state.calibration.values ? state.calibration.values.benchBaseline : null;
+  if (cal) {
+    const nums = String(cal).match(/\d+(?:\.\d+)?/g) || [];
+    if (nums.length) {
+      const w = Number(nums[0]), reps = nums.length > 1 ? Number(nums[1]) : 5;
+      if (w > 0) best = Math.max(best, w * (1 + reps / 30));
+    }
+  }
+  if (ex && ex.weight) best = Math.max(best, Number(ex.weight));
+  return best || null;
+}
+function pr5GoalProgressDetail(state, key, today) {
+  const cal = (state.calibration && state.calibration.values) || {};
+  const met = state.metrics || {};
+  const ov = state.goalOverrides || {};
+  const timeProgress = pr5Clamp(daysBetween(SEP_START, today) / Math.max(1, daysBetween(SEP_START, "2026-12-31")), 0, 1);
+  const finish = (progress, known) => {
+    const p = pr5Clamp(Number(progress) || 0, 0, 1);
+    return { progress: p, expected: timeProgress, lag: Math.max(0, timeProgress - p), ahead: Math.max(0, p - timeProgress), known: known !== false };
+  };
+  if (key === "bench") {
+    const cur = pr5EstimatedBench1RM(state); const target = (ov.bench && ov.bench.targetVal) || 225;
+    const start = 180; return finish(cur == null ? .05 : (cur - start) / Math.max(1, target - start), cur != null);
+  }
+  if (key === "mile") {
+    const cur = mmssToSec(met.mileBest || cal.mile || "5:57"); const target = (ov.mile && ov.mile.targetSec) || 330;
+    return finish(cur == null ? 0 : (357 - cur) / Math.max(1, 357 - target), cur != null);
+  }
+  if (key === "fiveK") {
+    const cur = mmssToSec(met.fiveKBest || cal.fiveK || "21:55"); const target = (ov.fiveK && ov.fiveK.targetSec) || 1200;
+    return finish(cur == null ? 0 : (1315 - cur) / Math.max(1, 1315 - target), cur != null);
+  }
+  if (key === "pullup") {
+    const arr = met.pullupBest || []; const cur = arr.length ? Number(arr[arr.length - 1].v) : Number(cal.pullupMax || 15); const target = (ov.pullup && ov.pullup.targetVal) || 20;
+    return finish((cur - 15) / Math.max(1, target - 15), Number.isFinite(cur));
+  }
+  if (key === "mu") return finish(met.muscleUp ? 1 : 0, true);
+  if (key === "bw") {
+    const arr = met.bodyweight || []; const cur = arr.length ? Number(arr[arr.length - 1].v) : Number(cal.bodyweight || 158); const target = (ov.bw && ov.bw.targetVal) || 163;
+    return finish((cur - 158) / Math.max(1, target - 158), Number.isFinite(cur));
+  }
+  if (key === "vertical") {
+    const v = pr5FirstNumber(cal.verticalJump); return finish(v == null ? 0 : .15, v != null);
+  }
+  return finish(0, false);
+}
+function pr5GoalProgress(state, key, today) {
+  return pr5GoalProgressDetail(state, key, today || SEP_START).progress;
+}
+function pr5GoalUrgencies(state, today) {
+  const performanceKeys = new Set(["bench","mile","fiveK","pullup","mu","speed","vertical"]);
+  return GOALS.map((g) => {
+    const detail = pr5GoalProgressDetail(state, g.key, today);
+    const base = PR5_IMPORTANCE[g.key] || (performanceKeys.has(g.key) ? 1 : .6);
+    const unknownBoost = !detail.known || ((g.key === "speed" || g.key === "vertical") && detail.progress === 0) ? .22 : 0;
+    const urgency = base * pr5Clamp(.32 + (detail.lag * 2.25) + ((1 - detail.progress) * .42) + unknownBoost - (detail.ahead * .70), .12, 2.4);
+    return { key: g.key, label: g.label, ...detail, urgency };
+  }).sort((a,b) => b.urgency - a.urgency);
+}
+function pr5WeekCapacity(settings) {
+  const wm = (settings && settings.weekdayMinutes) || {};
+  const vals = Array.from({ length: 7 }, (_, i) => Number(wm[i] == null ? 60 : wm[i]));
+  const days = vals.filter((v) => v >= 15).length;
+  const minutes = vals.reduce((sum, v) => sum + (Number.isFinite(v) && v > 0 ? v : 0), 0);
+  return { days, minutes, tight: days <= 3 || minutes < 180, roomy: days >= 5 && minutes >= 300 };
+}
+function pr5DerivedTarget(key, rel, score, ctx) {
+  const rule = PR5_STIMULUS_RULES[key] || { keep: .35, build: .76 };
+  const phaseMult = ((PR5_PHASE_MULT[ctx.phase] || {})[key]) || 1;
+  const recoveryMult = ctx.systemic >= 2 ? .55 : ctx.systemic === 1 ? .78 : 1;
+  const adjusted = rel * phaseMult * ctx.globalPressure * recoveryMult;
+  let target = 0;
+  if (adjusted >= rule.build && !ctx.capacity.tight) target = 2;
+  else if (adjusted >= rule.keep || score >= .52) target = 1;
+  if (ctx.capacity.tight && rule.optional) target = 0;
+  if (ctx.capacity.tight && rule.hard) target = Math.min(target, 1);
+  if (ctx.systemic >= 2 && rule.hard) target = Math.min(target, 1);
+  if (ctx.phase === "dec") target = Math.min(target, 1);
+  if (key === "verticalPower") {
+    if (ctx.knee === "irritated") target = 0;
+    else if (ctx.stage <= 1 && target > 1) target = 1;
+  }
+  if (key === "qualityRun" && ctx.knee === "irritated") target = Math.min(target, 1);
+  const min = target >= 2 && !rule.optional ? 1 : 0;
+  return { target, min, pressure: adjusted };
+}
+function pr5DerivedBudget(state, today) {
+  const urgencies = pr5GoalUrgencies(state, today);
+  const scores = {};
+  Object.keys(PR5_STIMULI).forEach((k) => { scores[k] = 0; });
+  urgencies.forEach((g) => {
+    const map = PR5_GOAL_MAP[g.key] || {};
+    Object.entries(map).forEach(([k,w]) => { scores[k] = (scores[k] || 0) + g.urgency * Number(w); });
+  });
+  const maxScore = Math.max(.001, ...Object.keys(scores).filter((k) => k !== "recovery").map((k) => scores[k] || 0));
+  const rel = (k) => (scores[k] || 0) / maxScore;
+  const stage = cbStageFor(state.settings.knee, state.settings.skillStage);
+  const phase = phaseOf(today);
+  const capacity = pr5WeekCapacity(state.settings);
+  const maxLag = Math.max(0, ...urgencies.map((g) => g.lag || 0));
+  const unknownPressure = urgencies.some((g) => !g.known || ((g.key === "speed" || g.key === "vertical") && g.progress === 0)) ? .12 : 0;
+  const systemic = fatigueLevelAt(state.fatigue, "systemic", today);
+  const globalPressure = pr5Clamp(.50 + maxLag * 2.0 + unknownPressure, .45, 1.25);
+  const ctx = { phase, capacity, stage, systemic, globalPressure, knee: state.settings.knee };
+  const rows = [];
+  const add = (key, reason) => {
+    const d = pr5DerivedTarget(key, rel(key), scores[key] || 0, ctx);
+    const rule = PR5_STIMULUS_RULES[key] || {};
+    rows.push({ key, label: PR5_STIMULI[key].label, min: d.min, target: d.target, optional: !!rule.optional || d.target === 0, score: scores[key] || 0, pressure: d.pressure, reason });
+  };
+  add("pressStrength", "Bench progress vs trajectory, plus physique maintenance if recovery allows.");
+  add("verticalPull", "Pull-up and muscle-up outcomes; dose changes as progress changes.");
+  add("horizontalPull", "Back/scapular support for pressing, pulling and shoulder health.");
+  add("lowerStrength", "Force base for speed, vertical and durable running.");
+  add("qualityRun", state.settings.knee === "irritated" ? "Mile/5K need remains, but knee flag caps this to low-impact quality." : "Mile and 5K trajectory determine the quality-running dose.");
+  add("easyAerobic", "Aerobic base, recovery support and body-composition engine.");
+  add("explosivePull", "Muscle-up skill and pulling power, managed around local fatigue.");
+  add("verticalPower", stage >= 3 ? "Vertical/dunk power dose only after knee stages earn it." : "Vertical/dunk foundation: landing, ankle/calf and hip capacity before aggressive jumping.");
+  add("arms", "Optional physique/support work; it rides along only when recovery and time allow.");
+  add("core", "Trunk stiffness for sprinting, jumping, running and lifting.");
+  const hardTargets = rows.filter((r) => (PR5_STIMULUS_RULES[r.key] || {}).hard).reduce((sum, r) => sum + r.target, 0);
+  const recoveryTarget = systemic >= 1 || hardTargets >= 4 || capacity.roomy ? 1 : 0;
+  rows.push({ key: "recovery", label: PR5_STIMULI.recovery.label, min: recoveryTarget, target: recoveryTarget, optional: recoveryTarget === 0, score: 0, pressure: recoveryTarget, reason: recoveryTarget ? "Recovery is prescribed because the current load needs room to adapt." : "Recovery is added by guardrail only when fatigue or day stacking makes it the best decision." });
+  const focus = urgencies.slice(0, 3);
+  return { rows, scores, focus, stage, phase, capacity, maxLag, globalPressure };
+}
+
+function pr5CreditsFromExercises(ids) {
+  const out = {};
+  const set = new Set(ids || []);
+  set.forEach((id) => (PR5_EXERCISE_STIMULI[id] || []).forEach((k) => { out[k] = 1; }));
+  const foundation = ["calfRaise","tibRaise","bandWalk","stepUp"].filter((id) => set.has(id));
+  if (foundation.length >= 2) out.verticalPower = Math.max(out.verticalPower || 0, 1);
+  return out;
+}
+function pr5EntryCredits(entry) {
+  const out = {};
+  const slot = SLOT_OF[entry.sessionId];
+  if (slot === "QR1" || slot === "QR2") {
+    const f = entry.completionFraction == null ? (entry.status === "completed" ? 1 : 0) : Number(entry.completionFraction);
+    if (f >= .6) out.qualityRun = 1; else if (f > 0) out.qualityRun = .5;
+  }
+  if (slot === "EASY") {
+    const f = entry.completionFraction == null ? (entry.status === "completed" ? 1 : 0) : Number(entry.completionFraction);
+    if (f >= .6 || Number(entry.duration || entry.runDuration || 0) >= 20) out.easyAerobic = 1;
+    else if (f > 0) out.easyAerobic = .5;
+  }
+  if (Array.isArray(entry.exercisesCompleted)) Object.assign(out, pr5CreditsFromExercises(entry.exercisesCompleted));
+  if (entry.status === "partial") return out;
+  if (!entry.exercisesCompleted) {
+    if (slot === "A") Object.assign(out, { pressStrength:1, verticalPull:1, horizontalPull:1, arms:1, core:1 });
+    if (slot === "B") Object.assign(out, { lowerStrength:1, core:1 });
+    if (slot === "C") Object.assign(out, { explosivePull:1, verticalPull:1, horizontalPull:1, arms:1 });
+    if (slot === "D") Object.assign(out, { verticalPower:1, core:1 });
+    if (slot === "REC") out.recovery = 1;
+  }
+  const loggedDuration = Number(entry.duration || 0);
+  if (entry.sessionId === "MICRO" || entry.sessionId === "MICRORUN" || (loggedDuration > 0 && loggedDuration < 15)) {
+    Object.keys(out).forEach((k) => { if (k !== "recovery") out[k] = Math.min(Number(out[k] || 0), .5); });
+  }
+  return out;
+}
+function pr5WeekDone(log, ws, budgetDef) {
+  const done = {}; (budgetDef || []).forEach((b) => { done[b.key] = 0; });
+  (log || []).forEach((e) => {
+    if ((e.status !== "completed" && e.status !== "partial") || weekStartOf(e.date) !== ws) return;
+    const c = pr5EntryCredits(e);
+    Object.entries(c).forEach(([k,v]) => { done[k] = (done[k] || 0) + Number(v || 0); });
+  });
+  return done;
+}
+function pr5Deficit(b, projected) { return Math.max(0, Number(b.target || 0) - Number(projected[b.key] || 0)); }
+function pr5BudgetPct(done, budgetDef) {
+  let n=0,d=0; (budgetDef || []).filter((b) => !b.optional).forEach((b) => { n += Math.min(Number(done[b.key]||0), Number(b.target||0)); d += Number(b.target||0); });
+  return d ? Math.round(100*n/d) : 100;
+}
+
+const PR5_MODULES = {
+  pressStrength: { key:"pressStrength", label:"Press strength", family:"upper", minutes:12, range:"8–24", hard:true, areas:["chest","shoulders","triceps"] },
+  verticalPull: { key:"verticalPull", label:"Pull-up strength", family:"upper", minutes:9, range:"8–20", hard:true, areas:["back","biceps"] },
+  horizontalPull: { key:"horizontalPull", label:"Row / back strength", family:"upper", minutes:9, range:"8–18", hard:true, areas:["back","biceps"] },
+  explosivePull: { key:"explosivePull", label:"Explosive pull + muscle-up", family:"upper", minutes:9, range:"8–18", hard:true, areas:["back","biceps"] },
+  lowerStrength: { key:"lowerStrength", label:"Lower force", family:"lower", minutes:22, range:"12–30", hard:true, areas:["hamstrings","glutes","quads"] },
+  verticalPower: { key:"verticalPower", label:"Vertical / jump development", family:"lower", minutes:9, range:"8–18", hard:false, areas:["quads","glutes","calves"] },
+  arms: { key:"arms", label:"Arms", family:"accessory", minutes:7, range:"6–16", hard:false, areas:["biceps","triceps"] },
+  core: { key:"core", label:"Core", family:"accessory", minutes:7, range:"6–14", hard:false, areas:["core"] },
+  easyAerobic: { key:"easyAerobic", label:"Easy aerobic", family:"easy", minutes:18, range:"15–35", hard:false, areas:["quads","hamstrings","glutes","calves"] },
+};
+
+const PR5_EXERCISE_ALIASES = {
+  benchA:["bench","bench press","barbell bench"], benchC:["speed bench","technique bench"], inclineDb:["incline","incline db","incline dumbbell press"],
+  ohp:["overhead press","shoulder press"], pushup:["push-up","push ups","pushups"], mbThrow:["medicine ball throw","med ball throw","chest throw"],
+  pullup:["pull-up","pull ups","pullups"], pulldown:["lat pulldown","pulldown"], csRow:["row","db row","chest supported row"], cableRow1:["cable row","1 arm row"], facePull:["face pull"],
+  exPull:["explosive pull-up","explosive pullup"], muTrans:["muscle-up","muscle up","transition"],
+  rdl:["romanian deadlift","hinge"], hipThrust:["hip thrust","glute bridge"], hamCurl:["hamstring curl"], stepUp:["step-up","spanish squat"], ssRdl:["split stance rdl"],
+  calfRaise:["calf raise"], tibRaise:["tibialis raise","tib raise"], bandWalk:["band walk","lateral band walk"],
+  latRaise:["lateral raise","lateral raises","side raise"], hammer:["hammer curl"], incCurl:["incline curl"], pressdown:["pressdown","triceps pressdown"], ohTri:["overhead triceps"],
+  kneeRaise:["knee raise"], pallof:["pallof"], abWheel:["ab wheel","dead bug"], farmer:["farmer carry"], easyAerobic20:["easy aerobic","cardio","zone 2"],
+};
+
+const PR5_MODULE_VARIANTS = {
+  pressStrength: [
+    { id:"short_press", label:"short press exposure", maxMinutes:15, rows:[["benchA","3 × 5","crisp strength work · ~2 reps in reserve"]] },
+    { id:"bench_strength", label:"heavy bench anchor", minMinutes:20, rows:[["benchA","4 × 5–6","primary strength work · RPE 7–8"],["inclineDb","2 × 8–10","secondary chest only if recovered"]] },
+    { id:"chest_volume", label:"chest volume", minMinutes:25, rows:[["benchC","3 × 6–8","smooth volume · never grind"],["inclineDb","3 × 8–10","controlled chest work"],["pushup","2 × near-clean-stop","stop 2 reps before form fades"]] },
+    { id:"press_power", label:"speed / power press", minMinutes:20, rows:[["mbThrow","4 × 3","violent chest pass · full reset"],["benchC","4 × 3","fast bar speed · 60–70%"],["pushup","2 × 8–12","explosive but clean"]] },
+    { id:"triceps_supported_press", label:"press + triceps", minMinutes:20, rows:[["benchA","3 × 5","strength touch"],["pressdown","3 × 10–12","triceps support for lockout"]] },
+    { id:"shoulder_supported_press", label:"shoulder-supported press", minMinutes:25, rows:[["ohp","3 × 8–10","shoulder strength without chasing max load"],["pushup","3 × 8–15","chest/triceps volume"]] },
+  ],
+  verticalPull: [
+    { id:"short_pull", label:"short strict pull exposure", maxMinutes:15, rows:[["pullup","2 × 6–8","strict · stop before form breaks"]] },
+    { id:"pullup_strength", label:"pull-up strength", minMinutes:16, rows:[["pullup","3 × 6–8","strict; add load only when 8s are crisp"]] },
+    { id:"lat_volume", label:"lat volume", minMinutes:20, rows:[["pulldown","3 × 8–10","smooth vertical pull"],["pullup","2 × 4–6","quality reps only"]] },
+    { id:"pull_biceps", label:"pull + biceps", minMinutes:20, rows:[["pullup","3 × 5–7","controlled"],["hammer","2 × 10–12","biceps support"]] },
+  ],
+  horizontalPull: [
+    { id:"short_row", label:"short row exposure", maxMinutes:15, rows:[["csRow","2 × 8–10","controlled horizontal pull"]] },
+    { id:"row_strength", label:"row strength", minMinutes:16, rows:[["csRow","3 × 8–10","controlled horizontal pull"]] },
+    { id:"scap_row", label:"scap / shoulder support", minMinutes:20, rows:[["cableRow1","3 × 10/side","reach, row, pause"],["facePull","2 × 12–15","upper-back finish"]] },
+    { id:"back_volume", label:"back volume", minMinutes:25, rows:[["csRow","3 × 8–10","heavy but clean"],["pulldown","2 × 10–12","lat volume"]] },
+  ],
+  explosivePull: [
+    { id:"short_explosive_pull", label:"short explosive pull", maxMinutes:15, rows:[["exPull","3 × 3","fast, crisp reps"]] },
+    { id:"pull_power", label:"pulling power", minMinutes:16, rows:[["exPull","4 × 3","full intent while fresh"],["pullup","2 × 5","strict back-off reps"]] },
+    { id:"muscle_up_skill", label:"muscle-up skill", minMinutes:20, rows:[["exPull","3 × 3","high pull intent"],["muTrans","3 × 3","skill, never sloppy failure"]] },
+  ],
+  lowerStrength: [
+    { id:"short_hinge", label:"short hinge dose", maxMinutes:15, rows:[["rdl","2 × 6–8","clean hinge"],["hipThrust","2 × 8–10","strong hip extension"]] },
+    { id:"hinge_force", label:"hinge force", minMinutes:16, rows:[["rdl","3 × 6–8","primary hinge"],["hipThrust","3 × 8–10","hip extension"],["hamCurl","2 × 10–12","hamstrings"]] },
+    { id:"glute_ham", label:"glute / hamstring strength", minMinutes:20, rows:[["hipThrust","4 × 6–8","hard hip extension"],["hamCurl","3 × 10–12","hamstrings"],["ssRdl","2 × 8/side","unilateral hinge"]] },
+    { id:"knee_safe_lower", label:"knee-aware lower", minMinutes:15, kneeSafe:true, rows:[["hipThrust","3 × 8–10","low-knee-stress force"],["ssRdl","2 × 8/side","controlled unilateral hinge"],["stepUp","2 × 8/side","pain-free range only"]] },
+  ],
+  arms: [
+    { id:"short_arms", label:"short arms microdose", maxMinutes:15, rows:[["hammer","2 × 10–12","clean reps"],["pressdown","2 × 10–12","clean reps"]] },
+    { id:"balanced_arms", label:"biceps + triceps", minMinutes:16, rows:[["hammer","3 × 10–12","biceps / brachialis"],["pressdown","3 × 10–12","triceps"]] },
+    { id:"biceps_bias", label:"biceps bias", minMinutes:12, rows:[["hammer","3 × 10–12","heavy-ish curl"],["incCurl","2 × 10–12","long-length biceps"]] },
+    { id:"triceps_bias", label:"triceps bias", minMinutes:12, rows:[["pressdown","3 × 10–12","lockout support"],["ohTri","2 × 10–12","long-head triceps"]] },
+  ],
+  core: [
+    { id:"short_core", label:"short trunk dose", maxMinutes:15, rows:[["kneeRaise","2 × 10–12","controlled"],["pallof","2 × 10/side","anti-rotation"]] },
+    { id:"anti_rotation", label:"anti-rotation trunk", minMinutes:12, rows:[["pallof","3 × 10/side","anti-rotation"],["farmer","3 × 30–40 yd","brace while moving"]] },
+    { id:"anterior_core", label:"abs / trunk", minMinutes:12, rows:[["abWheel","2–3 × 6–10","clean range"],["kneeRaise","2 × 10–12","no swing"]] },
+  ],
+  easyAerobic: [
+    { id:"short_engine", label:"short easy engine", rows:[["easyAerobic20","15–20 min","full-conversation pace"]] },
+    { id:"lift_flush", label:"post-lift flush", minMinutes:20, rows:[["easyAerobic20","20–30 min","easy enough to leave fresher"]] },
+  ],
+};
+
+function pr5LegacyModuleRows(key, minutes, stage) {
+  if (key === "pressStrength") return minutes <= 15 ? [["benchA","3 × 5","crisp strength work · ~2 reps in reserve"]] : [["benchA","4 × 5–6","primary strength work · RPE 7–8"],["inclineDb","2 × 8–10","secondary chest only if recovered"]];
+  if (key === "verticalPull") return minutes <= 15 ? [["pullup","2 × 6–8","strict · stop before form breaks"]] : [["pullup","3 × 6–8","strict; add load only when 8s are crisp"]];
+  if (key === "horizontalPull") return [["csRow", minutes <= 25 ? "2 × 8–10" : "3 × 8–10","controlled horizontal pull"]];
+  if (key === "explosivePull") return minutes <= 25 ? [["exPull","3 × 3","fast, crisp reps"]] : [["exPull","4 × 3","full intent while fresh"],["muTrans","3 × 3","skill, never sloppy failure"]];
+  if (key === "lowerStrength") return minutes <= 25 ? [["rdl","3 × 6–8","clean hinge"],["hipThrust","2 × 8–10","strong hip extension"]] : [["rdl","3 × 6–8","primary hinge"],["hipThrust","3 × 8–10","hip extension"],["hamCurl","2 × 10–12","hamstrings"]];
+  if (key === "verticalPower") {
+    if (stage <= 1) return [["calfRaise","2 × 12–15","jump foundation"],["tibRaise","2 × 15–20","ankle capacity"],["bandWalk","2 × 10/side","hip stability"]];
+    if (stage === 2) return [["snapDown","3 × 3","stick every landing"],["lowPogo","3 × 10","low contacts · skill, not conditioning"]];
+    if (stage === 3) return [["broadJumpDrill","3 × 2","full rest · stick landing"],["lowPogo","3 × 10","elastic ankle contacts"]];
+    return [["jumpReach","4 × 2","high quality · full rest · stop before fatigue"],["broadJumpDrill","3 × 2","power with clean landing"]];
+  }
+  if (key === "arms") return [["hammer","2 × 10–12","clean reps"],["pressdown","2 × 10–12","clean reps"]];
+  if (key === "core") return [["kneeRaise","2 × 10–12","controlled"],["pallof","2 × 10/side","anti-rotation"]];
+  if (key === "easyAerobic") return [["easyAerobic20", minutes <= 25 ? "15–20 min" : "20–30 min","full-conversation pace"]];
+  return [];
+}
+
+function pr5VerticalPowerVariants(stage) {
+  if (stage <= 1) return [
+    { id:"jump_foundation", label:"ankle / hip foundation", rows:[["calfRaise","2 × 12–15","jump foundation"],["tibRaise","2 × 15–20","ankle capacity"],["bandWalk","2 × 10/side","hip stability"]] },
+    { id:"quiet_knee_foundation", label:"knee-quiet foundation", kneeSafe:true, rows:[["hipThrust","2 × 8–10","hip power base"],["calfRaise","2 × 12–15","calf capacity"],["tibRaise","2 × 15–20","shin capacity"]] },
+  ];
+  if (stage === 2) return [
+    { id:"landing_skill", label:"landing skill", rows:[["snapDown","3 × 3","stick every landing"],["lowPogo","3 × 10","low contacts · skill, not conditioning"]] },
+    { id:"ankle_elastic", label:"ankle elasticity", rows:[["lowPogo","4 × 8","quiet contacts"],["calfRaise","2 × 12–15","capacity back-off"]] },
+  ];
+  if (stage === 3) return [
+    { id:"broad_power", label:"horizontal power", rows:[["broadJumpDrill","3 × 2","full rest · stick landing"],["lowPogo","3 × 10","elastic ankle contacts"]] },
+    { id:"reach_intro", label:"reach intro", rows:[["jumpReach","3 × 2","submax rhythm"],["snapDown","3 × 3","own the landing"]] },
+  ];
+  return [
+    { id:"max_reach", label:"max-reach practice", rows:[["jumpReach","4 × 2","high quality · full rest · stop before fatigue"],["broadJumpDrill","3 × 2","power with clean landing"]] },
+    { id:"elastic_power", label:"elastic power", rows:[["lowPogo","4 × 8","springy contacts"],["jumpReach","3 × 2","fresh max intent"]] },
+  ];
+}
+
+function pr5NormalizeText(v) { return String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+function pr5Hash(v) {
+  var h = 2166136261;
+  String(v || "").split("").forEach(function (ch) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); });
+  return Math.abs(h);
+}
+function pr5ExerciseTerms(id) {
+  var ex = EXERCISE_DEFAULTS[id] || {};
+  return Array.from(new Set([id, ex.name].concat(PR5_EXERCISE_ALIASES[id] || []).map(pr5NormalizeText).filter(function (x) { return x && x.length >= 3; })));
+}
+function pr5AvoidedExerciseIds(state) {
+  var out = new Set();
+  var mods = (state && state.sessionMods) || {};
+  Object.values(mods).forEach(function (m) { ((m && m.remove) || []).forEach(function (id) { out.add(id); }); });
+  var facts = (((state && state.trainerMemory) || {}).facts) || [];
+  facts.forEach(function (f) {
+    var key = pr5NormalizeText(f && f.key);
+    var text = pr5NormalizeText(f && f.text);
+    if (!/(avoid|hate|dislike|do not like|dont like|irritat|hurt|pain|remove)/.test(text + " " + key)) return;
+    Object.keys(EXERCISE_DEFAULTS).forEach(function (id) {
+      if (key === "avoid " + pr5NormalizeText(id) || pr5ExerciseTerms(id).some(function (term) { return text.indexOf(term) >= 0; })) out.add(id);
+    });
+  });
+  return out;
+}
+function pr5RowsRespectingMemory(rows, state) {
+  var avoided = pr5AvoidedExerciseIds(state);
+  if (!avoided.size) return rows;
+  var filtered = (rows || []).filter(function (r) { return !avoided.has(r[0]); });
+  return filtered.length ? filtered : [];
+}
+function pr5CapRowsForMinutes(rows, minutes) {
+  var cap = minutes <= 15 ? 1 : minutes <= 25 ? 2 : minutes <= 40 ? 3 : 4;
+  return (rows || []).slice(0, cap);
+}
+function pr5ModuleVariantOptions(key, stage) {
+  if (key === "verticalPower") return pr5VerticalPowerVariants(stage);
+  return PR5_MODULE_VARIANTS[key] || [];
+}
+function pr5ModuleMenu(key, stage) {
+  return pr5ModuleVariantOptions(key, stage).map(function (v) { return { id:v.id, label:v.label, rows:v.rows || [] }; });
+}
+function pr5PickModuleVariant(key, minutes, stage, state, dateStr, context) {
+  var variants = pr5ModuleVariantOptions(key, stage);
+  if (!variants.length) return null;
+  var candidates = variants.filter(function (v) {
+    return minutes >= (v.minMinutes || 0) && minutes <= (v.maxMinutes || 999);
+  });
+  if (!candidates.length) candidates = variants;
+  var knee = (state && state.settings && state.settings.knee) || "";
+  var kneeSafe = candidates.filter(function (v) { return v.kneeSafe; });
+  if ((knee === "watch" || knee === "irritated") && kneeSafe.length) candidates = kneeSafe;
+  candidates = candidates.map(function (v) {
+    return { variant:v, rows:pr5RowsRespectingMemory(pr5CapRowsForMinutes(v.rows, minutes), state) };
+  }).filter(function (x) { return x.rows.length > 0; });
+  if (!candidates.length) return null;
+  var salt = (context && context.variantSalt) || (context && context.modules ? context.modules.join("+") : "");
+  return candidates[pr5Hash([dateStr || "floating", key, minutes, stage || 1, salt].join("|")) % candidates.length];
+}
+function pr5ModuleRows(key, minutes, stage, state, dateStr, context) {
+  if (!state && !dateStr && !context) return pr5LegacyModuleRows(key, minutes, stage);
+  var picked = pr5PickModuleVariant(key, minutes, stage, state, dateStr, context);
+  return picked ? picked.rows : pr5RowsRespectingMemory(pr5CapRowsForMinutes(pr5LegacyModuleRows(key, minutes, stage), minutes), state);
+}
+function pr5ModuleLabel(key) {
+  return (PR5_STIMULI[key] && PR5_STIMULI[key].label) || (PR5_MODULES[key] && PR5_MODULES[key].label) || key;
+}
+function pr5GoalKeysForModules(modules, limit) {
+  var score = {};
+  (modules || []).forEach(function (moduleKey) {
+    Object.entries(PR5_GOAL_MAP).forEach(function (pair) {
+      var goalKey = pair[0], map = pair[1];
+      if (map[moduleKey]) score[goalKey] = (score[goalKey] || 0) + Number(map[moduleKey] || 0);
+    });
+  });
+  return Object.keys(score).sort(function (a,b) { return score[b] - score[a]; }).slice(0, limit || 4);
+}
+function pr5GoalLabel(key) {
+  if (key === "recovery") return "Recovery";
+  var g = GOALS.find(function (x) { return x.key === key; });
+  return g ? g.label : key;
+}
+function pr5DayModules(day) {
+  if (day && day.autoOverride && Array.isArray(day.autoOverride.modules)) return day.autoOverride.modules;
+  if (day && day.id && SESSIONS[day.id]) {
+    var c = expectedCreditsForPlannedSession(day.id, day.availableMinutes || 60);
+    return Object.keys(c).filter(function (k) { return PR5_STIMULI[k]; });
+  }
+  return [];
+}
+function pr5DayGoalKeys(day) {
+  if (day && Array.isArray(day.goalKeys) && day.goalKeys.length) return day.goalKeys;
+  return pr5GoalKeysForModules(pr5DayModules(day), 4);
+}
+function pr5ModuleCreditValue(key, minutes) {
+  if (minutes != null && Number(minutes) < 15) return .5;
+  return 1;
+}
+function pr5AvailabilityForDate(settings, state, d) {
+  var dayOverride = ((state && state.dayWorkoutOverrides) || {})[d] || {};
+  if (dayOverride.availableMinutes != null) return Number(dayOverride.availableMinutes) || 0;
+  var wm = (settings && settings.weekdayMinutes) || {};
+  var v = wm[dowMon0(d)];
+  return v == null ? 60 : Number(v);
+}
+function pr5ConstraintsForDate(state, d) {
+  var ov = ((state && state.dayWorkoutOverrides) || {})[d] || {};
+  return ov.constraints || {};
+}
+function pr5AreasFromEntry(entry) {
+  const out = new Set();
+  if (!entry) return [];
+  const slot = SLOT_OF[entry.sessionId];
+  if (slot === "QR1" || slot === "QR2" || slot === "EASY") ["quads","hamstrings","glutes","calves"].forEach((a) => out.add(a));
+  (entry.exercisesCompleted || []).forEach((id) => (PR5_EXERCISE_AREAS[id] || []).forEach((a) => out.add(a)));
+  if (!entry.exercisesCompleted && SESSION_FATIGUE_AREAS[slot]) SESSION_FATIGUE_AREAS[slot].forEach((a) => out.add(a));
+  return [...out];
+}
+function pr5Overlap(a,b) { const A = new Set(a || []); return (b || []).some((x) => A.has(x)); }
+function pr5EntryFamily(entry) {
+  if (!entry) return null; const slot = SLOT_OF[entry.sessionId];
+  if (slot === "QR1" || slot === "QR2") return "runHard"; if (slot === "EASY") return "easy"; if (slot === "REC" || slot === "MOB") return "recovery";
+  const ids = new Set(entry.exercisesCompleted || []);
+  if (ids.has("microRun")) return "runHard";
+  if (ids.has("easyAerobic20")) return "easy";
+  if (["rdl","hipThrust","hamCurl","stepUp","ssRdl","snapDown","lowPogo","broadJumpDrill","jumpReach","calfRaise","tibRaise","bandWalk"].some((x) => ids.has(x))) return "lower";
+  if (["benchA","benchC","pullup","csRow","pulldown","cableRow1","exPull","muTrans","inclineDb","ohp","pushup","mbThrow","hammer","incCurl","pressdown","ohTri","latRaise"].some((x) => ids.has(x))) return "upper";
+  const slot2 = SLOT_OF[entry.sessionId]; return slot2 === "B" || slot2 === "D" ? "lower" : (slot2 === "A" || slot2 === "C" ? "upper" : null);
+}
+function pr5RecentAreaLoad(log, areas, dateStr) {
+  let level = 0;
+  (log || []).forEach((e) => {
+    if (!e || (e.status !== "completed" && e.status !== "partial")) return;
+    const delta = daysBetween(e.date, dateStr);
+    if (delta <= 0 || delta > 3) return;
+    if (!pr5Overlap(pr5AreasFromEntry(e), areas || [])) return;
+    const fraction = e.completionFraction == null ? (e.status === "partial" ? .55 : 1) : Math.max(.25, Math.min(1, Number(e.completionFraction) || .5));
+    const rpe = Number(e.sessionRpe || FEEL_RPE[e.feel] || 7);
+    const base = rpe >= 9 ? 3 : rpe >= 8 ? 2 : 1;
+    level = Math.max(level, Math.max(0, base + (fraction >= .7 ? 0 : -1) - (delta - 1)));
+  });
+  return pr5Clamp(level, 0, 3);
+}
+function pr5DynamicLabelFromEntry(entry) {
+  const c = pr5EntryCredits(entry); const labels=[];
+  if (c.pressStrength) labels.push("Press"); if (c.verticalPull) labels.push("Pull-ups"); if (c.horizontalPull) labels.push("Rows");
+  if (c.lowerStrength) labels.push("Lower"); if (c.verticalPower) labels.push("Jump"); if (c.qualityRun) labels.push("Quality Run"); if (c.easyAerobic) labels.push("Easy Aerobic");
+  if (c.explosivePull) labels.push("MU / Power"); if (c.core) labels.push("Core"); if (c.arms) labels.push("Arms");
+  return labels.slice(0,3).join(" + ") || (SESSIONS[entry.sessionId] ? SESSIONS[entry.sessionId].short : "Training");
+}
+function pr5CarrierBaseIds(id) {
+  const sess = SESSIONS[id]; if (!sess || !sess.variants) return [];
+  const out = new Set(); Object.values(sess.variants).forEach((rows) => (rows || []).forEach((r) => out.add(r[0]))); return [...out];
+}
+function pr5ModuleRank(key, budget, projected) {
+  const b = budget.rows.find((x) => x.key === key); if (!b) return -1;
+  const gap = pr5Deficit(b, projected); if (gap <= 0) return -1;
+  const floorGap = Math.max(0, Number(b.min||0) - Number(projected[key]||0));
+  return gap * (1 + (b.score || 0)) + floorGap * 4;
+}
+function pr5ModuleEligible(mod, d, state, prevMeta, log) {
+  const sys = fatigueLevelAt(state.fatigue, "systemic", d);
+  if (mod.hard && sys >= 2) return false;
+  if (maxAreaFatigue(state.fatigue, mod.areas || [], d) >= 2) return false;
+  if (mod.hard && pr5RecentAreaLoad(log || state.log || [], mod.areas || [], d) >= 2) return false;
+  if (prevMeta && prevMeta.hard && mod.hard && pr5Overlap(prevMeta.areas, mod.areas)) return false;
+  if (mod.family === "lower" && prevMeta && prevMeta.family === "runHard") return false;
+  if (mod.family === "upper" && prevMeta && prevMeta.family === "upper" && prevMeta.hard) return false;
+  if (mod.key === "verticalPower" && state.settings.knee === "irritated") return false;
+  return true;
+}
+function pr5BuildStrengthDay(d, available, budget, projected, state, prevMeta, log) {
+  const primaryKeys = ["pressStrength","verticalPull","horizontalPull","explosivePull","lowerStrength","verticalPower"];
+  const candidates = primaryKeys.map((key) => ({ mod: PR5_MODULES[key], rank: pr5ModuleRank(key,budget,projected) }))
+    .filter((x) => x.rank > 0 && pr5ModuleEligible(x.mod,d,state,prevMeta,log)).sort((a,b) => b.rank-a.rank);
+  const accessoryCandidates = ["core","arms"].map((key) => ({ mod: PR5_MODULES[key], rank: pr5ModuleRank(key,budget,projected) }))
+    .filter((x) => x.rank > 0 && pr5ModuleEligible(x.mod,d,state,prevMeta,log)).sort((a,b) => b.rank-a.rank);
+  if (!candidates.length && !accessoryCandidates.length) return null;
+  let family = "accessory"; const chosen=[]; let used=0;
+  if (candidates.length) {
+    const first = candidates[0].mod; family = first.family; chosen.push(first); used = first.minutes;
+    candidates.slice(1).forEach((x) => {
+      if (x.mod.family !== family || used + x.mod.minutes > available) return;
+      chosen.push(x.mod); used += x.mod.minutes;
+    });
+  } else {
+    accessoryCandidates.forEach((x) => {
+      if (!chosen.length || used + x.mod.minutes <= available) { chosen.push(x.mod); used += x.mod.minutes; }
+    });
+  }
+  ["core","arms"].forEach((key) => {
+    if (chosen.some((m) => m.key === key)) return;
+    const m=PR5_MODULES[key], rank=pr5ModuleRank(key,budget,projected);
+    if (rank > 0 && used + m.minutes <= available && pr5ModuleEligible(m,d,state,prevMeta,log)) { chosen.push(m); used += m.minutes; }
+  });
+  const easy = PR5_MODULES.easyAerobic, easyRank = pr5ModuleRank("easyAerobic", budget, projected);
+  if (family === "upper" && easyRank > 0 && used + easy.minutes <= available && pr5ModuleEligible(easy,d,state,prevMeta,log)) {
+    chosen.push(easy); used += easy.minutes;
+  }
+  if (available <= 15 && family === "upper" && chosen.length === 1) {
+    const partner = candidates.find((x) => x.mod.key !== chosen[0].key && x.mod.family === "upper");
+    if (partner) chosen.push(partner.mod);
+  }
+  const stage = budget.stage; const rows=[]; const seen=new Set();
+  const moduleMinutes = available <= 15 ? 15 : Math.max(15, Math.floor(available / Math.max(1, chosen.length)));
+  const moduleKeys = chosen.map((m)=>m.key);
+  chosen.forEach((m) => pr5ModuleRows(m.key, moduleMinutes, stage, state, d, { modules: moduleKeys, variantSalt: family }).forEach((r) => { if (!seen.has(r[0])) { seen.add(r[0]); rows.push(r); } }));
+  if (!rows.length) return null;
+  let carrier = family === "lower" ? (state.settings.knee === "irritated" ? "BSAFE" : "B") : family === "accessory" ? "D" : (chosen.some((m)=>m.key==="pressStrength") ? "A" : "C");
+  if (carrier === "C" && maxAreaFatigue(state.fatigue,["chest","shoulders","triceps"],d) >= 1) carrier="CPULL";
+  const labels=chosen.map((m)=>m.label);
+  const goalKeys = pr5GoalKeysForModules(moduleKeys, 4);
+  const focus = budget.focus.map((g)=>g.label).slice(0,2).join(" + ");
+  return {
+    id:carrier, family, hard:chosen.some((m)=>m.hard), areas:Array.from(new Set(chosen.flatMap((m)=>m.areas||[]))), modules:moduleKeys, goalKeys,
+    displayName:"Adaptive Session — " + labels.slice(0,3).join(" + "), displayShort:labels.slice(0,2).join(" + "),
+    displayDesc:"Built from your Dec 31 outcomes, what is still unbanked this week, recovery and today's " + available + "-minute window.",
+    reasons:["Goal-driven focus: " + focus + ".","A/B/C are only exercise libraries here — this composition was assembled for today."],
+    autoOverride:{ date:d, tier:snapTier(available), availableMinutes:available, remove:pr5CarrierBaseIds(carrier), add:rows.map((r)=>({id:r[0],sr:r[1],note:r[2]})), modules:moduleKeys, reason:"Goal-derived mix · " + labels.join(" + ") },
+  };
+}
+function pr5RunDay(kind, d, available, budget, projected, state, prevMeta, log) {
+  const hard = kind === "qualityRun"; const lowerAreas=["quads","hamstrings","glutes","calves"];
+  if (hard && available < 25) return null;
+  if (hard && (fatigueLevelAt(state.fatigue,"systemic",d)>=2 || maxAreaFatigue(state.fatigue,lowerAreas,d)>=2)) return null;
+  if (hard && pr5RecentAreaLoad(log || state.log || [], lowerAreas, d) >= 2) return null;
+  if (hard && prevMeta && (prevMeta.family === "runHard" || prevMeta.family === "lower")) return null;
+  const doneQ = Number(projected.qualityRun || 0);
+  let id;
+  if (hard) id = state.settings.knee === "irritated" ? (doneQ < 1 ? "XT1" : "XT2") : (doneQ < 1 ? "QR1" : "QR2");
+  else id = state.settings.knee === "irritated" ? "EASYXT" : "EASY";
+  const adds=[]; const modules=[kind]; let used = hard ? 30 : 25;
+  ["core","arms"].forEach((key) => {
+    const m=PR5_MODULES[key], rank=pr5ModuleRank(key,budget,projected);
+    if (rank>0 && used+m.minutes<=available && pr5ModuleEligible(m,d,state,prevMeta,log)) {
+      pr5ModuleRows(key,Math.max(15, Math.floor(available / 2)),budget.stage,state,d,{ modules:[kind,key], variantSalt:"run" }).forEach((r)=>adds.push({id:r[0],sr:r[1],note:r[2]})); modules.push(key); used+=m.minutes;
+    }
+  });
+  const runOverride = hard ? runRxFor(d,SLOT_OF[id]) : (available <= 30 ? "20–30 min conversational" : runRxFor(d,"EASY"));
+  return {
+    id, family:hard?"runHard":"easy", hard, areas:lowerAreas, modules, goalKeys:pr5GoalKeysForModules(modules, 4),
+    displayName:hard ? "Adaptive Session — Quality Run" : "Adaptive Session — Easy Aerobic" + (modules.length>1 ? " + " + modules.slice(1).map((x)=>PR5_MODULES[x].label).join(" + ") : ""),
+    displayShort:hard ? "Quality Run" : "Easy Aerobic" + (modules.includes("core") ? " + Core" : ""),
+    displayDesc:hard ? "Today's running dose earns the highest-value conditioning adaptation without stacking lower-body fatigue." : "Easy aerobic work builds the engine and can absorb low-fatigue accessories when recovery allows.",
+    reasons:[hard ? "Mile / 5K outcomes are currently asking for a quality exposure." : "Aerobic base is still useful and recovery permits a low-stress exposure."],
+    autoOverride:{ date:d, availableMinutes:available, add:adds, modules, runOverride, reason:"Goal-derived " + (hard?"quality-running":"easy-aerobic") + " exposure." },
+  };
+}
+function pr5MicroRowsForKey(key, minutes, state, d, constraints) {
+  const noGym = !!(constraints && (constraints.noGym || constraints.travel || constraints.noEquipment));
+  const knee = state.settings && state.settings.knee;
+  const lowerAreas = ["quads","hamstrings","glutes","calves"];
+  if (key === "qualityRun") {
+    if (knee === "irritated" || fatigueLevelAt(state.fatigue,"systemic",d)>=2 || maxAreaFatigue(state.fatigue,lowerAreas,d)>=2) return [];
+    return [["microRun", minutes <= 7 ? "1 mile strong if safe; otherwise " + minutes + " min hard-controlled" : minutes + " min hard-controlled", "mile/5K signal · not a full quality day"]];
+  }
+  if (key === "easyAerobic") return [["easyAerobic20", minutes + " min easy", "travel-friendly aerobic touch"]];
+  if (key === "pressStrength") return noGym
+    ? [["pushup","1–2 clean hard sets","press-strength maintenance · stop before ugly reps"]]
+    : [["benchA","2 × 5","quick strength touch · leave 2 reps in reserve"]];
+  if (key === "verticalPull") return noGym ? [] : [["pullup","2–3 submax sets","pull-up goal touch · crisp reps only"]];
+  if (key === "horizontalPull") return noGym ? [] : [["csRow","2 × 8–10","quick back-strength touch"]];
+  if (key === "explosivePull") return noGym ? [] : [["exPull","3 × 2","fresh explosive reps · full reset"]];
+  if (key === "lowerStrength") return knee === "irritated"
+    ? [["hipThrust","2 × 8–10","pain-free lower force"],["calfRaise","2 × 12–15","ankle capacity"]]
+    : noGym
+      ? [["stepUp","2 × 8/side","pain-free hotel/stair option"],["calfRaise","2 × 15","lower-leg capacity"]]
+      : [["rdl","2 × 6–8","quick hinge dose"]];
+  if (key === "verticalPower") return knee === "irritated" ? [] : [["snapDown","3 × 3","own the landing"],["calfRaise","2 × 12–15","jump foundation"]];
+  if (key === "arms") return noGym
+    ? [["pushup","1 close-grip clean set","triceps microdose"]]
+    : [["hammer","2 × 10–12","biceps"],["pressdown","2 × 10–12","triceps"]];
+  if (key === "core") return [["abWheel","2 × 6–10","dead bug if no wheel"],["kneeRaise","1–2 × 8–12","controlled trunk"]];
+  return [];
+}
+function pr5BuildMicroDay(d, available, budget, projected, state, prevMeta, log) {
+  const constraints = pr5ConstraintsForDate(state, d);
+  const primary = budget.rows
+    .filter((b) => b.key !== "recovery" && pr5Deficit(b, projected) > 0)
+    .map((b) => ({ key:b.key, rank:pr5ModuleRank(b.key,budget,projected) + (b.min > Number(projected[b.key] || 0) ? 4 : 0) }))
+    .sort((a,b) => b.rank - a.rank);
+  const fallback = ["qualityRun","pressStrength","verticalPull","core","easyAerobic","arms","verticalPower","lowerStrength"];
+  const keys = primary.length ? primary.map((x)=>x.key) : fallback;
+  for (const key of keys.concat(fallback)) {
+    if (key === "recovery") continue;
+    if (PR5_MODULES[key] && !pr5ModuleEligible(PR5_MODULES[key],d,state,prevMeta,log)) continue;
+    const rows = pr5MicroRowsForKey(key, available, state, d, constraints);
+    if (!rows.length) continue;
+    const isRun = key === "qualityRun";
+    const modules = [key];
+    const labels = modules.map(pr5ModuleLabel);
+    const areas = Array.from(new Set(rows.flatMap((r)=>PR5_EXERCISE_AREAS[r[0]] || [])));
+    const goalKeys = pr5GoalKeysForModules(modules, 4);
+    const noGymText = constraints.noGym || constraints.travel || constraints.noEquipment ? " Travel/no-gym constraint: using portable work." : "";
+    return {
+      id:isRun ? "MICRORUN" : "MICRO", family:isRun ? "runHard" : (PR5_STIMULI[key] && PR5_STIMULI[key].family) || "accessory",
+      hard:false, areas, modules, goalKeys, creditValue:pr5ModuleCreditValue(key, available),
+      displayName:"Adaptive Micro-Dose — " + labels[0],
+      displayShort:available + " min · " + labels[0],
+      displayDesc:"Only " + available + " minutes are available, so the trainer preserves one useful Dec 31 signal instead of pretending this is a full workout." + noGymText,
+      reasons:["Constraint day: partial credit is banked toward " + labels[0] + ", and the remaining weekly gap stays on the board.","Goal link: " + goalKeys.map(pr5GoalLabel).join(" + ") + "."],
+      autoOverride:{ date:d, tier:15, availableMinutes:available, constraints, remove:[], add:rows.map((r)=>({id:r[0],sr:r[1],note:r[2]})), modules, runOverride:isRun ? rows[0][1] + " · " + rows[0][2] : null, reason:"Constraint micro-dose · " + labels[0] },
+    };
+  }
+  return null;
+}
+function pr5BuildSupportDay(d, available, budget, projected, state, prevMeta, log) {
+  if (available < 15 || Number(projected.support || 0) >= 2) return null;
+  if (fatigueLevelAt(state.fatigue,"systemic",d) >= 1) return null;
+  const stage = budget.stage;
+  const rotation = [
+    ["easyAerobic","core"],
+    ["arms","core"],
+    ["verticalPower","core"],
+    ["easyAerobic","arms"],
+  ][pr5Hash(d) % 4];
+  const chosen=[]; let used=0;
+  rotation.forEach((key) => {
+    const m = PR5_MODULES[key];
+    if (!m || used + m.minutes > available) return;
+    if (!pr5ModuleEligible(m,d,state,prevMeta,log)) return;
+    if (key === "verticalPower" && state.settings.knee !== "good") return;
+    chosen.push(m); used += m.minutes;
+  });
+  if (!chosen.length) return null;
+  const rows=[]; const seen=new Set();
+  const moduleKeys = chosen.map((m)=>m.key);
+  const moduleMinutes = Math.max(15, Math.floor(available / Math.max(1, chosen.length)));
+  chosen.forEach((m) => pr5ModuleRows(m.key,moduleMinutes,stage,state,d,{modules:moduleKeys,variantSalt:"support"}).forEach((r)=>{
+    if(!seen.has(r[0])) { seen.add(r[0]); rows.push(r); }
+  }));
+  if (!rows.length) return null;
+  const hasEasy = moduleKeys.includes("easyAerobic");
+  const labels = moduleKeys.map(pr5ModuleLabel);
+  const goalKeys = pr5GoalKeysForModules(moduleKeys, 4);
+  return {
+    id:hasEasy ? (state.settings.knee === "irritated" ? "EASYXT" : "EASY") : "D",
+    family:hasEasy ? "easy" : "accessory", hard:false, support:true, creditValue:.35,
+    areas:Array.from(new Set(chosen.flatMap((m)=>m.areas||[]))), modules:moduleKeys, goalKeys,
+    displayName:"Support Session — " + labels.join(" + "),
+    displayShort:labels.slice(0,2).join(" + "),
+    displayDesc:"The required goal floor is covered, so this is a low-cost support dose: useful, but not crammed in as a hard requirement.",
+    reasons:["Support day: keeps useful adaptations moving while respecting the harder sessions already forecasted.","Goal link: " + goalKeys.map(pr5GoalLabel).join(" + ") + "."],
+    autoOverride:{ date:d, tier:snapTier(available), availableMinutes:available, remove:pr5CarrierBaseIds(hasEasy ? "EASY" : "D"), add:rows.map((r)=>({id:r[0],sr:r[1],note:r[2]})), modules:moduleKeys, runOverride:hasEasy ? (available <= 30 ? "15–25 min conversational" : runRxFor(d,"EASY")) : null, reason:"Support mix · " + labels.join(" + ") },
+  };
+}
+
+function goalDrivenPlanWeek(ctx) {
+  const state = ctx.state || { settings:ctx.settings||{}, fatigue:ctx.fatigue||{}, calibration:{values:{}}, metrics:{}, exercises:{}, goalOverrides:{} };
+  const today=ctx.today, log=ctx.log||[], settings=ctx.settings||state.settings||{}, ws=weekStartOf(today);
+  const dates=Array.from({length:7},(_,i)=>addDays(ws,i)); const byDate=entriesByDateFn(log);
+  const budget=pr5DerivedBudget(state,today); const budgetDef=budget.rows; const done=pr5WeekDone(log,ws,budgetDef); const projected={...done};
+  const days=[]; let consecutive=0; let recoveryPlaced=(done.recovery||0)>0;
+  const avail=(d)=>pr5AvailabilityForDate(settings,state,d);
+  const row=(k)=>budgetDef.find((b)=>b.key===k); const gap=(k)=>row(k)?pr5Deficit(row(k),projected):0;
+  const actualMeta=(e)=>({ family:pr5EntryFamily(e), areas:pr5AreasFromEntry(e), hard:(pr5EntryFamily(e)==="upper"||pr5EntryFamily(e)==="lower"||pr5EntryFamily(e)==="runHard") });
+  let prevMeta=null;
+  dates.forEach((d)=>{
+    const e=byDate[d];
+    if (e && (e.status==="completed"||e.status==="partial"||e.status==="skipped")) {
+      const short=e.status==="skipped"?"Skipped":pr5DynamicLabelFromEntry(e); days.push({date:d,id:e.sessionId,status:e.status,reasons:[],entry:e,displayShort:short,displayName:e.status==="skipped"?"Skipped / reflowed":short,availableMinutes:avail(d),goalKeys:pr5GoalKeysForModules(Object.keys(pr5EntryCredits(e)).filter((k)=>PR5_STIMULI[k]),4)});
+      if (e.status==="completed"||e.status==="partial") { prevMeta=actualMeta(e); consecutive = prevMeta.family && prevMeta.family!=="recovery" ? consecutive+1 : 0; if(prevMeta.family==="recovery") recoveryPlaced=true; }
+      return;
+    }
+    if (d < today) { days.push({date:d,id:null,status:"past",reasons:[],displayShort:"—"}); prevMeta=null; consecutive=0; return; }
+    if ((ctx.dayFlags||{})[d]==="exhausted" || avail(d)<6 || fatigueLevelAt(state.fatigue,"systemic",d)>=3) {
+      days.push({date:d,id:"REC",status:"planned",displayName:"Recovery — Protect the Adaptation",displayShort:"Recovery",displayDesc:"No useful hard work beats recovery today.",reasons:["Recovery constraint wins over the weekly forecast."],autoOverride:null,availableMinutes:avail(d),goalKeys:["recovery"]});
+      projected.recovery=(projected.recovery||0)+1; recoveryPlaced=true; prevMeta={family:"recovery",areas:[],hard:false}; consecutive=0; return;
+    }
+    if (consecutive>=3) {
+      days.push({date:d,id:"REC",status:"planned",displayName:"Recovery — Planned",displayShort:"Recovery",displayDesc:"Three training days are already stacked. Bank the adaptation before adding more work.",reasons:["Recovery guardrail: no fourth consecutive training day in the forecast."],autoOverride:null,availableMinutes:avail(d),goalKeys:["recovery"]});
+      projected.recovery=(projected.recovery||0)+1; recoveryPlaced=true; prevMeta={family:"recovery",areas:[],hard:false}; consecutive=0; return;
+    }
+    const minutes=avail(d); const candidates=[];
+    if (minutes < 15) {
+      const micro=pr5BuildMicroDay(d,minutes,budget,projected,state,prevMeta,log);
+      if (micro) {
+        days.push({date:d,id:micro.id,status:"planned",reasons:micro.reasons||[],displayName:micro.displayName,displayShort:micro.displayShort,displayDesc:micro.displayDesc,autoOverride:micro.autoOverride||null,availableMinutes:minutes,goalKeys:micro.goalKeys||[]});
+        (micro.modules||[]).forEach((k)=>{ projected[k]=(projected[k]||0)+(micro.creditValue||.5); });
+        prevMeta={family:micro.family,areas:micro.areas||[],hard:!!micro.hard}; consecutive++;
+      } else {
+        days.push({date:d,id:"REC",status:"planned",displayName:"Recovery — Micro Window",displayShort:"Recovery",displayDesc:"The available window is too short for a useful safe goal dose today.",reasons:["The remaining goal work stays on the board for the next available slot."],autoOverride:null,availableMinutes:minutes,goalKeys:["recovery"]});
+        projected.recovery=(projected.recovery||0)+1; recoveryPlaced=true; prevMeta={family:"recovery",areas:[],hard:false}; consecutive=0;
+      }
+      return;
+    }
+    const strength=pr5BuildStrengthDay(d,minutes,budget,projected,state,prevMeta,log);
+    if(strength) {
+      const rank=strength.modules.reduce((sum,k)=>sum+Math.max(0,pr5ModuleRank(k,budget,projected)),0); candidates.push({...strength,rank});
+    }
+    if(gap("qualityRun")>0) { const r=pr5RunDay("qualityRun",d,minutes,budget,projected,state,prevMeta,log); if(r) candidates.push({...r,rank:pr5ModuleRank("qualityRun",budget,projected)+1}); }
+    if(gap("easyAerobic")>0) { const r=pr5RunDay("easyAerobic",d,minutes,budget,projected,state,prevMeta,log); if(r) candidates.push({...r,rank:pr5ModuleRank("easyAerobic",budget,projected)}); }
+	    const weekIx=Math.max(0,Math.floor(daysBetween(SEP_START,ws)/7)); const rotation=["upper","runHard","lower","easy"][(weekIx+dowMon0(d))%4];
+	    candidates.forEach((c)=>{ if(c.family===rotation)c.rank+=.18; }); candidates.sort((a,b)=>b.rank-a.rank);
+	    let choice=candidates[0]||null;
+	    if(!choice && recoveryPlaced) choice=pr5BuildSupportDay(d,minutes,budget,projected,state,prevMeta,log);
+    if(!choice) {
+      const id=gap("core")>0?"MOB":"REC"; const name=id==="MOB"?"Core / Mobility Reset":"Recovery";
+      days.push({date:d,id,status:"planned",displayName:name,displayShort:name,displayDesc:"No higher-value safe stimulus is outstanding for this slot.",reasons:["The calendar is a forecast, not a streak to protect."],autoOverride:null,availableMinutes:minutes,goalKeys:id==="MOB"?["abs","speed","vertical"]:["recovery"]});
+      if(id==="REC"){projected.recovery=(projected.recovery||0)+1;recoveryPlaced=true;} else projected.core=(projected.core||0)+1;
+      prevMeta={family:"recovery",areas:[],hard:false}; consecutive=0; return;
+    }
+    days.push({date:d,id:choice.id,status:"planned",reasons:choice.reasons||[],displayName:choice.displayName,displayShort:choice.displayShort,displayDesc:choice.displayDesc,autoOverride:choice.autoOverride||null,availableMinutes:minutes,goalKeys:choice.goalKeys||pr5GoalKeysForModules(choice.modules||[],4)});
+    (choice.modules||[]).forEach((k)=>{ projected[k]=(projected[k]||0)+(choice.creditValue||pr5ModuleCreditValue(k, minutes)); });
+    if(choice.support) projected.support=(projected.support||0)+1;
+    prevMeta={family:choice.family,areas:choice.areas||[],hard:!!choice.hard}; consecutive++;
+  });
+  if(!recoveryPlaced && gap("recovery")>0) {
+    for(let i=days.length-1;i>=0;i--){ const d=days[i]; if(d.date>=today&&d.status==="planned"){ d.id="REC";d.displayName="Recovery — Planned";d.displayShort="Recovery";d.displayDesc="The weekly forecast reserves one low-stress day so the work can turn into adaptation.";d.reasons=["Recovery is a required input to the Dec 31 plan."];d.autoOverride=null;d.goalKeys=["recovery"];projected.recovery=(projected.recovery||0)+1;break; } }
+  }
+  const pct=pr5BudgetPct(done,budgetDef); const focusText=budget.focus.map((g)=>g.label).join(" · ");
+  return { days,dropped:[],notes:["Goal-derived prescription — current focus: "+focusText+". Weekly targets are outputs, not permanent rules."],done,projected,pct,forecastPct:pr5BudgetPct(projected,budgetDef),
+    message:"The calendar is today's best forecast toward Dec 31. Log what actually happens and it will re-compose from the remaining goals, recovery and time.",
+    phase:phaseOf(today),effPhase:phaseOf(addDays(ws,3)),calMode:false,weekStart:ws,budgetDef,strategy:{focus:budget.focus,scores:budget.scores,stage:budget.stage} };
+}
+
+function planWeek(ctx) {
+  const ph=phaseOf(ctx.today); const eff=phaseOf(addDays(weekStartOf(ctx.today),3));
+  if(ph==="pre"||ph==="cal"||eff==="pre"||eff==="cal") {
+    const legacy=legacyPlanWeek(ctx); return {...legacy,budgetDef:BUDGET_DEF,strategy:null};
+  }
+  return goalDrivenPlanWeek(ctx);
+}
+
 /* ===================== 5. PROGRESSION ENGINE (pure JS) ==================== */
 /* Double progression for accessories; deliberate +5 rule for bench A.       */
 
@@ -1263,6 +2140,28 @@ function progressExercise(ex, marker) {
   if (marker === "up") w = ex.weight + inc;
   if (marker === "down") w = Math.max(0, ex.weight - inc);
   return { ...ex, weight: w };
+}
+function pr5ExerciseProgressionFromFeedback(exId, ex, difficulty, observedWeight) {
+  if (!ex) return { previousWeight: null, loggedWeight: null, nextWeight: null, changed: false, canProgress: false };
+  var observed = Number(observedWeight);
+  var hasObserved = Number.isFinite(observed) && observed >= 0;
+  var current = ex.weight != null && Number.isFinite(Number(ex.weight)) ? Number(ex.weight) : (hasObserved ? observed : null);
+  var inc = Number(ex.inc || 0);
+  var canProgress = !ex.bw && inc > 0 && exId !== "benchA" && exId !== "benchC";
+  var next = ex.weight;
+  if (canProgress && current != null) {
+    if (difficulty === "too_easy") next = current + inc;
+    else if (difficulty === "too_hard") next = Math.max(0, current - inc);
+    else if (ex.weight == null && hasObserved) next = current;
+    else next = ex.weight;
+  }
+  return {
+    previousWeight: ex.weight == null ? null : Number(ex.weight),
+    loggedWeight: hasObserved ? observed : (ex.weight == null ? null : Number(ex.weight)),
+    nextWeight: next,
+    changed: next !== ex.weight,
+    canProgress,
+  };
 }
 function benchNext(reps, weight) {
   const valid = reps.filter((r) => Number.isFinite(r) && r > 0);
@@ -1285,6 +2184,7 @@ function goalSnapshot(state) {
     mile: met.mileBest || cal.mile || "5:57",
     fiveK: met.fiveKBest || cal.fiveK || "21:55",
     mu: !!met.muscleUp,
+    vertical: cal.verticalJump || null,
   };
 }
 function pctToward(cur, start, target) {
@@ -1393,24 +2293,150 @@ function effectiveList(session, tier, mods, dayOverride) {
   var base = session.variants ? (session.variants[effTier] || session.variants[60]) : [];
   var m = (mods || {})[SLOT_OF[session.id]] || {};
   var removed = [ ...(m.remove || []), ...((dayOverride && dayOverride.remove) || []) ];
+  var userRemoved = [ ...(m.remove || []), ...((dayOverride && dayOverride.userRemove) || []) ];
   var list = base.filter(function (row) { return removed.indexOf(row[0]) < 0; });
+  var seen = new Set(list.map(function (row) { return row[0]; }));
+  var append = function (id, sr, note) {
+    if (!id || userRemoved.indexOf(id) >= 0 || seen.has(id)) return;
+    seen.add(id);
+    list = list.concat([[id, sr || "2 × 8–12", note || "coach add"]]);
+  };
   if ((effTier === 60 || effTier === 40) && m.add) {
-    m.add.forEach(function (a) { list = list.concat([[a.id, a.sr, "your add"]]); });
+    m.add.forEach(function (a) { append(a.id, a.sr, "your add"); });
   }
   if (dayOverride && Array.isArray(dayOverride.add)) {
-    dayOverride.add.forEach(function (a) { list = list.concat([[a.id, a.sr || "2 × 8–12", a.note || "coach add"]]); });
+    dayOverride.add.forEach(function (a) { append(a.id, a.sr, a.note || "coach add"); });
   }
   return list.length ? list : null;
+}
+
+function pr5EffectiveWorkoutForDay(state, day) {
+  if (!state || !day || !day.id || !SESSIONS[day.id]) return null;
+  var session = SESSIONS[day.id];
+  var date = day.date;
+  var storedOverride = date ? ((state.dayWorkoutOverrides || {})[date] || null) : null;
+  var rawMinutes = day.availableMinutes != null ? Number(day.availableMinutes) : pr5AvailabilityForDate(state.settings, state, date);
+  var minutes = storedOverride && storedOverride.availableMinutes != null ? Number(storedOverride.availableMinutes) : rawMinutes;
+  if (!Number.isFinite(minutes)) minutes = 60;
+  var tier = (storedOverride && storedOverride.tier) || (day.autoOverride && day.autoOverride.tier) || snapTier(minutes);
+  var auto = resizeGoalOverrideForTier(day.autoOverride, tier, state);
+  var override = mergeDayOverrides(auto, storedOverride);
+  var effectiveTier = override.tier || tier;
+  var rows = effectiveList(session, effectiveTier, state.sessionMods, override) || [];
+  var modules = Array.from(new Set([...(override.modules || []), ...pr5DayModules(day)]));
+  return { day, session, date, minutes, tier: effectiveTier, override, rows, modules };
+}
+
+function pr5LiveModuleScore(key, plan, currentModules) {
+  var row = ((plan && plan.budgetDef) || []).find(function (b) { return b.key === key; });
+  var done = Number(((plan && plan.done) || {})[key] || 0);
+  var target = row ? Number(row.target || 0) : 0;
+  var min = row ? Number(row.min || 0) : 0;
+  var gap = Math.max(0, target - done);
+  var floorGap = Math.max(0, min - done);
+  var score = floorGap * 8 + gap * 3 + (row ? Number(row.score || 0) : 0);
+  if ((currentModules || []).indexOf(key) >= 0) score += .75;
+  if (key === "core") score += .6;
+  if (key === "arms") score += .35;
+  if (key === "easyAerobic") score += .25;
+  return score;
+}
+
+function pr5LiveModuleAllowed(key, state, current, extraMinutes) {
+  var mod = PR5_MODULES[key];
+  if (!mod || !current) return false;
+  var date = current.date;
+  var sys = fatigueLevelAt(state.fatigue, "systemic", date);
+  if (key === "verticalPower" && state.settings.knee !== "good") return false;
+  if (mod.hard && (extraMinutes < 15 || sys >= 2)) return false;
+  if (maxAreaFatigue(state.fatigue, mod.areas || [], date) >= 2) return false;
+  var currentModules = current.modules || [];
+  var hasHardRun = current.session && current.session.kind === "run" && current.session.tone !== "easy";
+  var hasLower = currentModules.some(function (k) { return PR5_MODULES[k] && PR5_MODULES[k].family === "lower"; });
+  var hasHardUpper = currentModules.some(function (k) { return PR5_MODULES[k] && PR5_MODULES[k].family === "upper" && PR5_MODULES[k].hard; });
+  if (hasHardRun) return ["core", "arms"].indexOf(key) >= 0;
+  if (hasLower && mod.family === "lower") return false;
+  if (hasHardUpper && key === "pressStrength") return false;
+  if ((current.override.remove || []).indexOf(key) >= 0) return false;
+  return true;
+}
+
+function pr5RowsForLiveModule(key, state, current, minutes) {
+  var constraints = (current.override && current.override.constraints) || pr5ConstraintsForDate(state, current.date);
+  var stage = cbStageFor(state.settings.knee, state.settings.skillStage);
+  var raw = minutes < 15
+    ? pr5MicroRowsForKey(key, Math.max(6, minutes), state, current.date, constraints)
+    : pr5ModuleRows(key, Math.max(15, minutes), stage, state, current.date, { modules: (current.modules || []).concat([key]), variantSalt: "live" });
+  var used = new Set((current.rows || []).map(function (r) { return r[0]; }));
+  var clean = pr5RowsRespectingMemory(raw, state).filter(function (r) { return r && r[0] && !used.has(r[0]); });
+  var cap = minutes <= 8 ? 1 : minutes <= 15 ? 2 : 3;
+  return clean.slice(0, cap);
+}
+
+function pr5LiveExtensionPatch(state, plan, date, rawMinutes) {
+  var day = plan && plan.days ? plan.days.find(function (d) { return d.date === date; }) : null;
+  var current = pr5EffectiveWorkoutForDay(state, day);
+  if (!current) return null;
+  var extra = Number(rawMinutes);
+  if (!Number.isFinite(extra) || extra <= 0) extra = 8;
+  extra = Math.round(pr5Clamp(extra, 5, 30));
+  var preferred = ["core", "arms", "easyAerobic", "verticalPull", "horizontalPull", "verticalPower", "explosivePull", "pressStrength", "lowerStrength"];
+  var ranked = preferred
+    .filter(function (key) { return pr5LiveModuleAllowed(key, state, current, extra); })
+    .map(function (key) { return { key, score: pr5LiveModuleScore(key, plan, current.modules) }; })
+    .sort(function (a, b) { return b.score - a.score; });
+  for (var i = 0; i < ranked.length; i += 1) {
+    var rows = pr5RowsForLiveModule(ranked[i].key, state, current, extra);
+    if (!rows.length) continue;
+    var modules = Array.from(new Set((current.modules || []).concat([ranked[i].key])));
+    var nextMinutes = Math.max(0, Math.round(Number(current.minutes || 0) + extra));
+    return {
+      availableMinutes: nextMinutes,
+      tier: snapTier(nextMinutes),
+      add: rows.map(function (r) { return { id: r[0], sr: r[1], note: r[2] || "live add-on" }; }),
+      modules,
+      reason: "Live extra-time add-on: " + pr5ModuleLabel(ranked[i].key) + ".",
+      liveIntent: "extend",
+    };
+  }
+  return null;
+}
+
+function pr5LiveShortenPatch(state, plan, date, rawMinutes) {
+  var day = plan && plan.days ? plan.days.find(function (d) { return d.date === date; }) : null;
+  var current = pr5EffectiveWorkoutForDay(state, day);
+  if (!current) return null;
+  var mins = Number(rawMinutes);
+  if (!Number.isFinite(mins) || mins <= 0) mins = 15;
+  mins = Math.round(pr5Clamp(mins, 5, 60));
+  var keep = mins <= 8 ? 1 : mins <= 15 ? 2 : mins <= 25 ? 3 : 4;
+  var rows = current.rows || [];
+  var remove = rows.slice(keep).map(function (r) { return r[0]; });
+  var patch = {
+    availableMinutes: mins,
+    tier: snapTier(mins),
+    remove,
+    modules: current.modules || [],
+    reason: "Live cut-down: keep the highest-priority work; the rest stays available for the forecast.",
+    liveIntent: "shorten",
+  };
+  if (current.session && current.session.kind === "run") {
+    patch.runOverride = mins < 15
+      ? mins + " min controlled effort or stop now if the important work is already done"
+      : mins + " min condensed version; keep quality controlled and stop before rushing";
+  }
+  return remove.length || (current.session && current.session.kind === "run") ? patch : null;
 }
 
 /* ------------------ Coach (chat assistant) pure helpers ------------------ */
 
 function buildCoachSystem(state, plan, today) {
   var dayLines = plan.days.map(function (d) {
-    var ss = d.id ? SESSIONS[d.id].short : "rest";
+    var ss = d.displayShort || (d.id ? SESSIONS[d.id].short : "rest");
     return DOW_SHORT[dowMon0(d.date)] + " " + d.date.slice(5) + " " + ss + " (" + d.status + ")";
   }).join("; ");
-  var budget = BUDGET_DEF.map(function (b) { return b.label + " " + (plan.done[b.key] || 0) + "/" + b.target; }).join(", ");
+  var currentBudget = plan.budgetDef || BUDGET_DEF;
+  var budget = currentBudget.map(function (b) { return b.label + " " + (plan.done[b.key] || 0) + "/" + b.target; }).join(", ");
   var ov = state.goalOverrides || {};
   var goals = GOALS.map(function (g) { return g.label + " -> " + ((ov[g.key] && ov[g.key].label) || g.target); }).join("; ");
   var kneeTxt = state.settings.knee;
@@ -1418,9 +2444,9 @@ function buildCoachSystem(state, plan, today) {
   var benchW = state.exercises.benchA.weight;
   var benchTxt = benchW == null ? "unknown / learning" : benchW + " lb";
   var todayPlan = plan.days.find(function (d) { return d.date === today; });
-  var todaySession = todayPlan && todayPlan.id ? SESSIONS[todayPlan.id] : null;
-  var mergedTodayOverride = mergeDayOverrides(todayPlan && todayPlan.autoOverride, (state.dayWorkoutOverrides || {})[today]);
-  var todayList = todaySession ? (effectiveList(todaySession, snapTier(state.settings.weekdayMinutes[dowMon0(today)] || 60), state.sessionMods, mergedTodayOverride) || []) : [];
+  var todayEffective = pr5EffectiveWorkoutForDay(state, todayPlan);
+  var todaySession = todayEffective ? todayEffective.session : null;
+  var todayList = todayEffective ? todayEffective.rows : [];
   var todayExerciseText = todayList.map(function (r) { return (state.exercises[r[0]] ? state.exercises[r[0]].name : r[0]) + " " + r[1]; }).join("; ") || "none";
   var fatigueParts = [];
   FATIGUE_AREAS.concat(["systemic"]).forEach(function (a) { var lv = fatigueLevelAt(state.fatigue, a, today); if (lv > 0) fatigueParts.push(a + "=" + lv); });
@@ -1441,18 +2467,18 @@ function buildCoachSystem(state, plan, today) {
     "Recent coaching observations: " + memory + ".\nLong-term trainer facts: " + trainerFacts + ".\nRecent athlete timeline: " + recentEvents + ".\nRecent food/context: " + recentFood + ". Recent water: " + recentWater + ". Last weekly check-in: " + checkText + ". Active workout: " + activeText + ".\n" +
     "CORE BEHAVIOR: The static program is the starting hypothesis. A/B/C are anchor templates, NOT a push/pull/legs split and NOT sacred day types. The trainer may intelligently combine compatible stimuli on the same day (for example easy aerobic + pull-up skill + a short arms block, or condensed Upper C + 15–20 min easy aerobic) when that better serves the weekly goals. Actual performance data changes future prescription inside safe program constraints. If the user reports what actually happened, update structured state — do not only give advice. A session can be full, partial, skipped, substituted, or mixed. Credit only exercises/stimuli actually completed. Do not create debt for every missed accessory. Primary stimuli matter more than optional accessories.\n" +
     "If the user says the workout was too hard: identify local vs systemic fatigue, log it, and use adjust_week_from_feedback. Hard Upper A should suppress pressing but can leave legs available; hard Lower or hard run should protect the next 24-48h of lower-body intensity. If very hard/systemically wrecked, protect recovery.\n" +
-    "If the user says too easy: do NOT punish with random volume. For an accessory that was clearly too easy, use exercise_feedback too_easy (one normal increment). For bench, prefer log_bench with actual reps/RIR evidence rather than a blind jump. For running, record the observation and progress conservatively rather than making a huge one-session jump.\n" +
-    "During a workout you may modify TODAY: if an exercise hurts, remove it; if equipment is unavailable, remove/replace only what is needed; if time collapses, use set_today_time and preserve the highest-value remaining work. Pain is not a challenge to push through.\n" +
+    "If the user says too easy: do NOT punish with random volume. For an accessory that was clearly too easy, use exercise_feedback too_easy (one normal increment). If they mention a load, include actual_weight so the app can learn the load and set the next one. For bench, prefer log_bench with actual reps/RIR evidence rather than a blind jump. For running, record the observation and progress conservatively rather than making a huge one-session jump.\n" +
+    "During a workout you may modify TODAY: if the user has a few more minutes, use extend_today_session to add one compatible goal-positive finisher or support block. If the user needs to leave, use shorten_today_session to keep the highest-value remaining work and reflow the rest. If an exercise hurts, remove it; if equipment is unavailable, remove/replace only what is needed. If they can do the session but need to move one exercise or combine test to tomorrow/later, use defer_exercises. For future one-off time constraints use set_day_time. For travel/no-gym/no-equipment use set_day_constraints. Pain is not a challenge to push through.\n" +
     "Food/lifestyle notes are low-friction context. Log them when the user volunteers them; do not demand calories/macros.\n" +
     "TIMING: A report can describe now, earlier today, yesterday, after a prior workout, or the future. Preserve that distinction. Historical pain that has resolved is not current pain. Future availability is not a recurring weekday rule unless the athlete says it is.\n" +
     "MEMORY: Conversation is not the database. Use a specific logging action when available; otherwise use log_event for a useful timeline fact. Use remember_fact only for stable preferences, established tolerances, repeated patterns, or durable athlete facts — never make one noisy session a permanent rule.\n" +
     "REPLAN THRESHOLD: Most messages are log-only. Re-plan only when pain, meaningful fatigue/recovery, actual performance, missed/partial work, or availability materially changes the next training decision.\n" +
     "Respond with ONLY raw JSON, no markdown/fences, shape {\"reply\":\"...\",\"actions\":[...]}.\n" +
     "Allowed actions:\n" +
-    "complete_session {date?, feel?}; log_partial_session {date?, duration?, exercises_completed?, exercises_skipped?, feel?, session_rpe?, completion_fraction?, notes?}; skip_session {date?, reason?}; recalc_week {}; move_session {slot,to_date};\n" +
-    "adjust_week_from_feedback {date?, session_rpe?, fatigue_areas?, systemic_fatigue?, pain_areas?, notes?}; set_fatigue {area,level,note?}; exercise_feedback {name,difficulty,observed_rir?,note?} difficulty=too_easy|appropriate|too_hard; modify_today_session {remove_exercises?,add_exercises?,reason?}; set_today_time {minutes};\n" +
+    "complete_session {date?, feel?}; log_partial_session {date?, duration?, exercises_completed?, exercises_skipped?, feel?, session_rpe?, completion_fraction?, notes?}; skip_session {date?, reason?}; recalc_week {};\n" +
+    "adjust_week_from_feedback {date?, session_rpe?, fatigue_areas?, systemic_fatigue?, pain_areas?, notes?}; set_fatigue {area,level,note?}; exercise_feedback {name,difficulty,actual_weight?,observed_rir?,note?} difficulty=too_easy|appropriate|too_hard; modify_today_session {remove_exercises?,add_exercises?,reason?}; defer_exercises {from_date?,to_date,exercises,reason?}; extend_today_session {date?,minutes?,reason?}; shorten_today_session {date?,minutes?,reason?}; set_today_time {minutes};\n" +
     "log_event {event_type,occurred_at?,body_area?,severity?,active?,context?,text?,data?}; remember_fact {key?,text,confidence?}; log_set {name,weight?,reps?,rir?,note?};\n" +
-    "log_bench {weight,reps?}; set_bench_weight {weight}; log_metric {kind,value}; log_food {text}; log_water {ounces}; log_recovery {sleep_hours?,sleep_score?,feel?,note?}; weekly_checkin {bodyweight?,waist?,knee?,feel?,note?}; log_note {text}; set_goal {key,target}; set_knee {status}; set_availability {dow,minutes}; flag_exhausted {}; add_exercise {session,name,sets_reps?,weight?}; remove_exercise {name,session?}; set_exercise_weight {name,weight}; set_skill_stage {stage}.\n" +
+    "log_bench {weight,reps?}; set_bench_weight {weight}; log_metric {kind,value}; log_food {text}; log_water {ounces}; log_recovery {sleep_hours?,sleep_score?,feel?,note?}; weekly_checkin {bodyweight?,waist?,knee?,feel?,note?}; log_note {text}; set_goal {key,target}; set_knee {status}; set_availability {dow,minutes}; set_day_time {date,minutes}; set_day_constraints {date?,travel?,no_gym?,no_equipment?,note?}; flag_exhausted {}; add_exercise {session,name,sets_reps?,weight?}; remove_exercise {name,session?}; set_exercise_weight {name,weight}; set_skill_stage {stage}.\n" +
     "Exercise names can be natural language. Dates YYYY-MM-DD; omit date for today. Multiple actions allowed. Never invent completed training. If the user says 'I only did bench and pullups', use log_partial_session — not complete_session. If they say 'that was brutal, adjust my week', use adjust_week_from_feedback so the calendar actually changes."
   );
 }
@@ -1468,6 +2494,175 @@ function parseCoachReply(text) {
     } catch (e) { /* fall through */ }
   }
   return { reply: t.slice(0, 400), actions: [] };
+}
+
+function localCoachAreasFromText(lower) {
+  var out = [];
+  var pairs = [
+    ["chest", "chest"], ["pec", "chest"],
+    ["shoulder", "shoulders"], ["delt", "shoulders"],
+    ["tricep", "triceps"], ["back", "back"], ["lat", "back"],
+    ["bicep", "biceps"], ["curl", "biceps"],
+    ["quad", "quads"], ["hamstring", "hamstrings"], ["hammy", "hamstrings"],
+    ["glute", "glutes"], ["calf", "calves"], ["core", "core"], ["ab", "core"],
+  ];
+  pairs.forEach(function (p) { if (lower.indexOf(p[0]) >= 0) out.push(p[1]); });
+  if ((lower.indexOf("legs") >= 0 || lower.indexOf("lower body") >= 0) && out.length === 0) out = out.concat(["quads", "hamstrings", "glutes"]);
+  if (lower.indexOf("upper") >= 0 && out.length === 0) out = out.concat(["chest", "back", "shoulders"]);
+  return Array.from(new Set(out.filter(function (a) { return FATIGUE_AREAS.indexOf(a) >= 0; })));
+}
+
+function localCoachExerciseNamesFromText(lower) {
+  var out = [];
+  [
+    [/\bbench(?:ed|ing)?\b/, "bench"],
+    [/\bpull[-\s]?ups?\b|\bpullups?\b/, "pullup"],
+    [/\brdls?\b|\bromanian deadlifts?\b/, "rdl"],
+    [/\bhip thrusts?\b/, "hipThrust"],
+    [/\bcurls?\b/, "curl"],
+    [/\blateral raises?\b|\bshoulder raises?\b/, "lateralraise"],
+    [/\brows?\b|\bcable rows?\b|\bdb rows?\b/, "row"],
+    [/\bpulldowns?\b/, "pulldown"],
+    [/\bcalf\b|\bcalves\b|\bcalf raises?\b/, "calfRaise"],
+    [/\btib\b|\btibialis\b|\btib raises?\b/, "tibRaise"],
+    [/\bband walks?\b/, "bandWalk"],
+  ].forEach(function (p) { if (p[0].test(lower)) out.push(p[1]); });
+  return Array.from(new Set(out));
+}
+function localCoachResolvedExerciseId(name) {
+  var aliases = { bench:"benchA", pullup:"pullup", curl:"hammer", row:"csRow", lateralraise:"latRaise", rdl:"rdl", pulldown:"pulldown" };
+  return EXERCISE_DEFAULTS[name] ? name : (aliases[name] || name);
+}
+function localCoachExerciseLabel(name) {
+  var id = localCoachResolvedExerciseId(name);
+  return EXERCISE_DEFAULTS[id] ? EXERCISE_DEFAULTS[id].name : String(name || "exercise");
+}
+
+function localCoachTurn(state, plan, today, userText) {
+  var text = String(userText || "").trim();
+  var lower = text.toLowerCase();
+  var actions = [];
+  var add = function (a) { actions.push(a); };
+  var tomorrow = addDays(today, 1);
+  var yesterday = addDays(today, -1);
+  var date = lower.indexOf("yesterday") >= 0 ? yesterday : today;
+  var areas = localCoachAreasFromText(lower);
+  var exercises = localCoachExerciseNamesFromText(lower);
+  var water = lower.match(/(\d{1,3})\s*(?:oz|ounces)\b/);
+  var waist = lower.match(/waist[^0-9]*(\d{1,2}(?:\.\d+)?)/);
+  var weight = lower.match(/\b(\d{2,3}(?:\.\d+)?)\s*(?:lb|lbs|pounds)?\b/);
+  var sleepHours = lower.match(/(?:slept|sleep)[^0-9]*(\d(?:\.\d+)?)\s*(?:h|hr|hrs|hours)\b/);
+  var minutesMention = lower.match(/\b(\d{1,3})\s*(?:min|mins|minute|minutes)\b/);
+  var loadMention = lower.match(/\b(\d{1,3}(?:\.\d+)?)\s*(?:lb|lbs|pounds)\b/);
+  var rirMention = lower.match(/\b(?:rir|reps? in reserve|reps? left|left in tank)[^0-9]*(\d{1,2})\b/) || lower.match(/\b(\d{1,2})\s*(?:rir|reps? left|reps? in reserve)\b/);
+  var saysBodyweight = /(weigh|bodyweight|body weight|scale|this morning|morning weight)/.test(lower);
+  var saysFood = /\b(ate|had|meal|breakfast|lunch|dinner|shake|protein|chicken|rice|bowl)\b/.test(lower);
+  var saysBadSleep = /(slept badly|bad sleep|poor sleep|terrible sleep|sleep was bad|slept like trash|slept awful)/.test(lower);
+  var saysPain = /(hurt|pain|ache|tweak|bother|flare|irritat|wrecked)/.test(lower);
+  var saysTooEasy = /(too easy|way too easy|easy as hell|could have done more)/.test(lower);
+  var saysTooHard = /(too hard|way too hard|brutal|cooked|wrecked|destroyed|fried|smoked)/.test(lower);
+  var saysPartial = /(only did|just did|got through|partial|ran out of time|15 minutes|25 minutes|40 minutes)/.test(lower) && exercises.length > 0;
+  var saysAvoidExercise = /(hate|dislike|do not like|don't like|dont like|avoid|never again|not doing)/.test(lower) && exercises.length > 0;
+  var saysProgramRemove = saysAvoidExercise || /(remove|take out|swap out).*(program|library|future|going forward|forever)/.test(lower);
+  var saysMoreTime = /(few more minutes|more minutes|extra minutes|extra time|more time|time to spare|spare.*minutes|what else can we do|what else should i do|add on|addon|finisher)/.test(lower);
+  var saysLeaveEarly = /(need to leave|have to leave|gotta leave|got to leave|gotta go|have to go|need to go|cut.*short|wrap.*up|skip the rest|remove the rest|out of time|need to head out)/.test(lower);
+  var saysTravel = /(travel|traveling|travelling|flight|airport|hotel|road trip|on the road|no gym|no equipment|hotel only|bodyweight only)/.test(lower);
+  var saysExerciseDefer = exercises.length > 0 &&
+    /(can't|cannot|cant|won't|wont|unable|not able|can't do|cannot do|cant do|skip|move|push|defer|make it)/.test(lower) &&
+    /(tomorrow|later|next day|today)/.test(lower) &&
+    !/(can't train|cannot train|cant train)/.test(lower);
+  var targetDate = lower.indexOf("tomorrow") >= 0 ? tomorrow : date;
+
+  if (water) add({ type: "log_water", ounces: Number(water[1]), date: today });
+  if (waist) add({ type: "log_metric", kind: "waist", value: waist[1], date: today });
+  if (saysBodyweight && weight && Number(weight[1]) >= 90 && Number(weight[1]) <= 260 && !water) add({ type: "log_metric", kind: "bodyweight", value: weight[1], date: today });
+  if (saysFood) add({ type: "log_food", text: text, date: today });
+  if (sleepHours || saysBadSleep) {
+    add({ type: "log_recovery", sleep_hours: sleepHours ? Number(sleepHours[1]) : null, feel: saysBadSleep ? "poor" : "", note: text, date: today });
+    if (saysBadSleep) add({ type: "adjust_week_from_feedback", date: today, systemic_fatigue: 1, notes: text });
+  }
+  if (/knee/.test(lower) && saysPain) {
+    add({ type: "set_knee", status: "irritated" });
+    add({ type: "log_event", event_type: "pain", body_area: "knee", severity: 2, active: true, text: text, date: today });
+  } else if (/knee/.test(lower) && /(good|fine|normal|quiet|better|cleared)/.test(lower)) {
+    add({ type: "set_knee", status: "good" });
+  }
+  if (lower.indexOf("can't train tomorrow") >= 0 || lower.indexOf("cannot train tomorrow") >= 0 || lower.indexOf("cant train tomorrow") >= 0 || lower.indexOf("busy tomorrow") >= 0) {
+    add({ type: "skip_session", date: tomorrow, reason: text });
+  } else if (lower.indexOf("can't train today") >= 0 || lower.indexOf("cannot train today") >= 0 || lower.indexOf("cant train today") >= 0) {
+    add({ type: "skip_session", date: today, reason: text });
+  }
+  if (saysTravel) {
+    add({ type: "set_day_constraints", date: targetDate, travel: /travel|traveling|travelling|flight|airport|hotel|road trip|on the road/.test(lower), no_gym: /no gym|hotel only|bodyweight only/.test(lower), no_equipment: /no equipment|bodyweight only/.test(lower), note: text });
+  }
+  if (saysExerciseDefer) {
+    var deferredExercises = exercises.map(localCoachResolvedExerciseId);
+    if (/combine/.test(lower) && deferredExercises.indexOf("pullup") >= 0) deferredExercises.push("exPull");
+    add({
+      type: "defer_exercises",
+      from_date: today,
+      to_date: targetDate === today ? tomorrow : targetDate,
+      exercises: Array.from(new Set(deferredExercises)),
+      reason: text,
+    });
+  }
+  if (saysLeaveEarly && !saysPartial) {
+    add({ type: "shorten_today_session", date: targetDate, minutes: minutesMention ? Number(minutesMention[1]) : null, reason: text });
+  } else if (saysMoreTime && !saysPartial) {
+    add({ type: "extend_today_session", date: targetDate, minutes: minutesMention ? Number(minutesMention[1]) : null, reason: text });
+  }
+  if (minutesMention && !saysPartial && !saysMoreTime && !saysLeaveEarly && /(only|have|got|available|window|time|minute|min|today|tomorrow|travel|hotel|busy)/.test(lower)) {
+    add({ type: "set_day_time", date: targetDate, minutes: Number(minutesMention[1]) });
+  }
+  if (saysPartial) {
+    var duration = lower.indexOf("15") >= 0 ? 15 : lower.indexOf("25") >= 0 ? 25 : lower.indexOf("40") >= 0 ? 40 : null;
+    add({ type: "log_partial_session", date: date, duration: duration, exercises_completed: exercises, exercises_skipped: [], session_rpe: saysTooHard ? 8 : null, completion_fraction: duration ? Math.min(1, duration / 60) : null, notes: text });
+  }
+  if ((saysTooEasy || saysTooHard) && exercises.length > 0) {
+    add({
+      type: "exercise_feedback",
+      name: exercises[0],
+      difficulty: saysTooEasy ? "too_easy" : "too_hard",
+      actual_weight: loadMention ? Number(loadMention[1]) : null,
+      observed_rir: rirMention ? Number(rirMention[1]) : null,
+      note: text,
+      date: date,
+    });
+  }
+  if (saysAvoidExercise) {
+    exercises.forEach(function (name) {
+      var id = localCoachResolvedExerciseId(name);
+      add({ type: "remember_fact", key: "avoid_" + id, text: "Avoid " + localCoachExerciseLabel(name) + " when possible; user said: " + text, confidence: .85, date: today });
+    });
+  }
+  if (saysProgramRemove) {
+    exercises.forEach(function (name) { add({ type: "remove_exercise", name: localCoachResolvedExerciseId(name), date: today }); });
+  }
+  if (saysTooHard || (areas.length && /(sore|tight|cooked|wrecked|fried|brutal|fatigue|tired)/.test(lower))) {
+    add({ type: "adjust_week_from_feedback", date: date, session_rpe: saysTooHard ? 8 : null, fatigue_areas: areas, systemic_fatigue: /system|whole body|exhausted|wrecked/.test(lower) ? 2 : null, notes: text });
+  }
+  if (saysPain && exercises.length > 0 && /(remove|skip|swap|take out|sub)/.test(lower)) {
+    add({ type: "modify_today_session", remove_exercises: exercises, reason: text, date: today });
+  }
+  if (/bench/.test(lower)) {
+    var bench = lower.match(/bench(?:ed)?[^0-9]*(\d{2,3})/);
+    if (bench && Number(bench[1]) >= 45) add({ type: "log_bench", weight: Number(bench[1]), date: date });
+  }
+  if (/(pullup|pull-up|pull ups|pull-ups)/.test(lower)) {
+    var pu = lower.match(/(?:pullup|pull-up|pull ups|pull-ups)[^0-9]*(\d{1,2})/);
+    if (pu) add({ type: "log_metric", kind: "pullup", value: Number(pu[1]), date: date });
+  }
+  if (actions.length === 0) add({ type: "log_note", text: text, date: today });
+  var reply = "Saved locally. I turned that message into structured trainer data, so the next forecast can use it. The cloud AI endpoint is not connected in this local prototype yet, so I used the built-in extractor for this one.";
+  if (actions.some(function (a) { return a.type === "defer_exercises"; })) {
+    reply = "Got it. I moved that piece out of today's session and attached it to " + fmtShort(targetDate === today ? tomorrow : targetDate) + ". The local fallback handled this without the cloud AI endpoint.";
+  } else if (actions.some(function (a) { return a.type === "modify_today_session" || a.type === "extend_today_session" || a.type === "shorten_today_session" || a.type === "set_day_time" || a.type === "set_day_constraints" || a.type === "skip_session"; })) {
+    reply = "Got it. I updated the plan locally so the forecast can reflow around what you just told me.";
+  }
+  return {
+    reply,
+    actions: actions.slice(0, 8),
+  };
 }
 
 function goalTargetToOverride(key, target) {
@@ -1486,7 +2681,7 @@ function goalTargetToOverride(key, target) {
 
 /* ========================= 6. STATE + PERSISTENCE ========================= */
 
-import { Check, X, ChevronDown, ChevronRight, ChevronLeft, Clock, Moon, Zap, Activity, Calendar, Settings as SettingsIcon, RefreshCw, AlertTriangle, TrendingUp, Target, ArrowRight, Plus, MessageCircle, Send, Bell } from "lucide-react";
+import { Check, X, ChevronDown, ChevronRight, ChevronLeft, Clock, Moon, Zap, Activity, Calendar, Settings as SettingsIcon, RefreshCw, TrendingUp, Target, ArrowRight, MessageCircle, Send, Bell } from "lucide-react";
 
 function freshDefaultState() {
   const exercises = {};
@@ -1666,11 +2861,13 @@ function makeActions(setState, notify) {
     setDayWorkoutOverride(date, patch) {
       up((s) => {
         const all = { ...(s.dayWorkoutOverrides || {}) };
-        const cur = { ...(all[date] || {}) };
-        all[date] = { ...cur, ...patch,
-          remove: patch.remove ? Array.from(new Set([ ...(cur.remove || []), ...patch.remove ])) : (cur.remove || []),
-          add: patch.add ? [ ...(cur.add || []), ...patch.add ] : (cur.add || []),
-        };
+	        const cur = { ...(all[date] || {}) };
+	        all[date] = { ...cur, ...patch,
+	          remove: patch.remove ? Array.from(new Set([ ...(cur.remove || []), ...patch.remove ])) : (cur.remove || []),
+	          userRemove: patch.userRemove ? Array.from(new Set([ ...(cur.userRemove || []), ...patch.userRemove ])) : (cur.userRemove || []),
+	          add: patch.add ? [ ...(cur.add || []), ...patch.add ] : (cur.add || []),
+	          constraints: patch.constraints ? { ...(cur.constraints || {}), ...patch.constraints } : (cur.constraints || {}),
+	        };
         return { ...s, dayWorkoutOverrides: all };
       });
     },
@@ -1700,19 +2897,27 @@ function makeActions(setState, notify) {
       });
       notify("Feedback logged. The remaining week now re-scores around your fatigue and what you actually completed.");
     },
-    recordExerciseFeedback(exId, difficulty, date, observedRir, note) {
+    recordExerciseFeedback(exId, difficulty, date, observedRir, note, observedWeight) {
       up((s) => {
         const ex = s.exercises[exId]; if (!ex) return s;
-        let nextWeight = ex.weight;
-        if (exId !== "benchA" && exId !== "benchC" && ex.weight != null) {
-          if (difficulty === "too_easy") nextWeight = ex.weight + (ex.inc || 5);
-          if (difficulty === "too_hard") nextWeight = Math.max(0, ex.weight - (ex.inc || 5));
-        }
-        const updated = { ...ex, weight: nextWeight, history: [ ...(ex.history || []), { date, w: ex.weight, feedback: difficulty, rir: observedRir == null ? null : observedRir, note: note || "" } ] };
-        const obs = [ ...((s.coachMemory || {}).observations || []), { date, text: ex.name + " felt " + difficulty.replace("_", " ") + (observedRir != null ? " (RIR ~" + observedRir + ")" : "") + (nextWeight !== ex.weight ? "; next load " + nextWeight + " " + ex.unit : "") } ];
+        const prog = pr5ExerciseProgressionFromFeedback(exId, ex, difficulty, observedWeight);
+        const updated = {
+          ...ex,
+          weight: prog.nextWeight,
+          history: [ ...(ex.history || []), {
+            date,
+            w: prog.loggedWeight,
+            previousWeight: prog.previousWeight,
+            nextWeight: prog.nextWeight,
+            feedback: difficulty,
+            rir: observedRir == null ? null : observedRir,
+            note: note || "",
+          } ],
+        };
+        const obs = [ ...((s.coachMemory || {}).observations || []), { date, text: ex.name + " felt " + difficulty.replace("_", " ") + (prog.loggedWeight != null ? " at " + prog.loggedWeight + " " + ex.unit : "") + (observedRir != null ? " (RIR ~" + observedRir + ")" : "") + (prog.changed ? "; next load " + prog.nextWeight + " " + ex.unit : "") } ];
         return { ...s, exercises: { ...s.exercises, [exId]: updated }, coachMemory: { observations: obs.slice(-80) } };
       });
-      notify(difficulty === "too_easy" ? "Logged — next accessory load nudged up one normal step." : difficulty === "too_hard" ? "Logged — next accessory load reduced one step." : "Exercise feedback logged.");
+      notify(difficulty === "too_easy" ? "Logged — next load nudged up one normal step when progression is safe." : difficulty === "too_hard" ? "Logged — next load reduced one step when progression is load-based." : "Exercise feedback logged.");
     },
     pinSession(date, slotId) {
       up((s) => {
@@ -1721,7 +2926,7 @@ function makeActions(setState, notify) {
         pins[date] = slotId;
         return { ...s, pins };
       });
-      notify("Moved. Everything else re-planned around it.");
+      notify("Forecast updated around that date.");
     },
     startWorkout(date, sessionId, tier) {
       up((s) => ({ ...s, activeWorkout: { date, sessionId, tier: Number(tier) || 60, startedAt: Date.now(), source: "web", watchStatus: "waiting_for_native_bridge" } }));
@@ -1909,7 +3114,7 @@ function makeActions(setState, notify) {
         const calibration = { ...s.calibration, values: { ...s.calibration.values, bodyweight: p.bw || s.calibration.values.bodyweight } };
         return {
           ...s, exercises, metrics, calibration,
-          settings: { ...s.settings, weekdayMinutes: { ...s.settings.weekdayMinutes, ...(p.minutes || {}) }, reminderOn: !!p.reminderOn, reminderTime: p.reminderTime || s.settings.reminderTime },
+          settings: { ...s.settings, reminderOn: !!p.reminderOn, reminderTime: p.reminderTime || s.settings.reminderTime },
           health: { connected: !!p.health },
           ui: { ...s.ui, onboarded: true },
         };
@@ -1988,6 +3193,7 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 .daycell.optional{border-style:dashed}
 .daycell .dlab{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--faint)}
 .daycell .dname{font-size:12.5px;font-weight:700;line-height:1.25}
+.daycell .dgoals{font-size:10.5px;line-height:1.25;color:var(--ice)}
 .daycell .dstat{margin-top:auto;display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dim)}
 .exrow{display:grid;grid-template-columns:1fr auto;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
 .exrow:last-child{border-bottom:none}
@@ -1998,6 +3204,20 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 .mes{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--good);border:1px solid rgba(67,201,138,.4);padding:3px 8px;border-radius:999px}
 .reason{display:flex;gap:8px;font-size:12.5px;color:var(--dim);margin-top:5px}
 .reason:before{content:"—";color:var(--faint)}
+.impactbox{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--panel2);margin-top:12px}
+.rxbox{border:1px solid var(--line2);border-radius:10px;padding:13px;background:rgba(12,19,32,.72);margin-top:12px}
+.rxhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.rxsub{font-size:12.5px;color:var(--dim);margin-top:3px}
+.rxlist{display:grid;gap:8px;margin-top:11px}
+.rxrow{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}
+.rxidx{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;background:var(--raise);color:var(--ice);font-size:12px;font-weight:800}
+.rxname{font-weight:800;font-size:13.5px;line-height:1.25}
+.rxdetail{font-size:12px;color:var(--dim);line-height:1.35;margin-top:3px}
+.rxrun{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:10px;border:1px solid rgba(107,155,239,.35);border-radius:8px;background:rgba(107,155,239,.07);margin-top:11px}
+.goalchips{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.goalchip{font-family:var(--mono);font-size:10px;color:var(--ice);border:1px solid rgba(107,155,239,.35);border-radius:999px;padding:3px 7px}
+.miniBudget{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.miniBudget span{font-family:var(--mono);font-size:10.5px;color:var(--dim);border:1px solid var(--line2);border-radius:6px;padding:3px 7px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--raise);border:1px solid var(--line2);border-radius:10px;padding:11px 18px;font-size:13px;z-index:100;box-shadow:0 8px 30px rgba(0,0,0,.5);max-width:92vw}
 .input,.select{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;font-family:var(--mono);width:100%}
 .input:focus,.select:focus{outline:none;border-color:var(--accent)}
@@ -2018,7 +3238,7 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 .goalrow{display:grid;grid-template-columns:110px 1fr 130px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .goalrow:last-child{border-bottom:none}
 .modal-scrim{position:fixed;inset:0;background:rgba(5,8,13,.72);z-index:60;display:flex;align-items:center;justify-content:center;padding:20px}
-.modal{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:22px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.modal{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:22px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .monthcard{border-left:2px solid var(--line2);padding-left:16px;margin-top:18px}
 .monthcard.on{border-left-color:var(--accent)}
 .badge{font-family:var(--mono);font-size:10px;letter-spacing:.12em;border:1px solid var(--line2);border-radius:4px;padding:2px 6px;color:var(--dim)}
@@ -2047,6 +3267,7 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 .mcell.out{opacity:.32}
 .mcell .mdate{font-size:10.5px;color:var(--faint)}
 .mcell .mname{font-size:10.5px;font-weight:700;line-height:1.2}
+.mcell .mgoal{font-size:9.5px;line-height:1.15;color:var(--ice)}
 .mcell .mic{margin-top:auto}
 .fab{position:fixed;right:22px;bottom:22px;z-index:70;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#0A0E15;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 26px rgba(107,155,239,.35)}
 .fab:hover{background:#82ABF2}
@@ -2133,6 +3354,19 @@ function snapTier(mins) {
   return 15;
 }
 function tierLabel(t) { return t === 15 ? "15 min · MES" : t + " min"; }
+function exerciseLoadChip(state, exId, goCalibrate) {
+  const ex = state.exercises[exId];
+  if (!ex) return null;
+  if (ex.bw) return <span className="wchip">{ex.unit}</span>;
+  if (ex.weight != null) return <span className="wchip num">{ex.weight} {ex.unit}</span>;
+  if (ex.derived && state.exercises.benchA.weight) {
+    return <span className="wchip num">≈{Math.round((state.exercises.benchA.weight * 0.65) / 5) * 5} lb</span>;
+  }
+  if (goCalibrate) {
+    return <button className="wchip missing" onClick={goCalibrate} style={{ cursor: "pointer", background: "none" }}>calibrate →</button>;
+  }
+  return <span className="wchip missing">calibrate</span>;
+}
 
 /* ------------------------------ TODAY VIEW ------------------------------- */
 
@@ -2148,7 +3382,7 @@ function KneeSelector({ knee, setKnee }) {
 }
 
 function ExerciseList({ session, tier, state, goCalibrate, date, autoOverride }) {
-  const override = mergeDayOverrides(autoOverride, date ? (state.dayWorkoutOverrides || {})[date] : null);
+  const override = mergeDayOverrides(resizeGoalOverrideForTier(autoOverride, tier, state), date ? (state.dayWorkoutOverrides || {})[date] : null);
   const list = effectiveList(session, tier, state.sessionMods, override);
   if (!list) return null;
   return (
@@ -2156,17 +3390,13 @@ function ExerciseList({ session, tier, state, goCalibrate, date, autoOverride })
       {override && (override.remove || []).length > 0 && <p className="small" style={{ color: "var(--warn)", marginBottom: 8 }}>Coach-adjusted today: {override.reason || "some work was removed to match recovery/time."}</p>}
       {list.map(([exId, sr, note], i) => {
         const ex = state.exercises[exId];
-        const hasW = ex && ex.weight != null && !ex.bw;
         return (
           <div className="exrow" key={i}>
             <div>
               <div className="exname">{ex ? ex.name : exId}</div>
               <div className="exmeta"><span className="num">{sr}</span>{restOf(session, exId) ? " · rest " + restOf(session, exId) : ""}{note ? " · " + note : ""}</div>
             </div>
-            {ex && ex.bw ? <span className="wchip">{ex.unit}</span>
-              : hasW ? <span className="wchip num">{ex.weight} {ex.unit}</span>
-              : ex && ex.derived && state.exercises.benchA.weight ? <span className="wchip num">≈{Math.round((state.exercises.benchA.weight * 0.65) / 5) * 5} lb</span>
-              : <button className="wchip missing" onClick={goCalibrate} style={{ cursor: "pointer", background: "none" }}>calibrate →</button>}
+            {exerciseLoadChip(state, exId, goCalibrate)}
           </div>
         );
       })}
@@ -2184,7 +3414,11 @@ function TriToggle({ value, onChange }) {
   );
 }
 
-function CombineCapturePanel({ session, state, actions, today }) {
+function CombineCapturePanel({ session, state, actions, today, dayOverride }) {
+  const removedIds = new Set(((dayOverride && dayOverride.remove) || []));
+  const addedItems = ((dayOverride && dayOverride.add) || []).filter((a) => a && a.id);
+  const addedIds = new Set(addedItems.map((a) => a.id));
+  const showCalItem = (id) => !id || !removedIds.has(id);
   const cal = (state.calibration && state.calibration.values) || {};
   const exW = (id) => state.exercises[id] && state.exercises[id].weight != null ? String(state.exercises[id].weight) : "";
   const [f, setF] = useState(() => ({
@@ -2197,7 +3431,7 @@ function CombineCapturePanel({ session, state, actions, today }) {
     calfRaiseWeight: exW("calfRaise"), calfRaiseReps: "", calfRaiseRir: "2",
     tibRaiseWeight: exW("tibRaise"), tibRaiseReps: "", tibRaiseRir: "2",
     stepUpWeight: exW("stepUp"), stepUpReps: "", stepUpRir: "",
-    broadJump: cal.broadJump || "",
+    broadJump: cal.broadJump || "", verticalJump: cal.verticalJump || "",
     trackLaps: cal.trackLaps || "", trackStraight: cal.trackStraight || "", easyMinutes: "35",
     csRowWeight: exW("csRow"), csRowReps: "", csRowRir: "2",
     inclineDbWeight: exW("inclineDb"), inclineDbReps: "", inclineDbRir: "2",
@@ -2215,7 +3449,7 @@ function CombineCapturePanel({ session, state, actions, today }) {
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const num = (k) => { const raw = String(f[k] == null ? "" : f[k]).trim(); if (!raw) return null; const n = Number(raw); return Number.isFinite(n) ? n : null; };
   const input = (key, label, unit, placeholder) => (
-    <div className="field" style={{ minWidth: 105, flex: "1 1 105px" }}>
+    <div className="field" key={key} style={{ minWidth: 105, flex: "1 1 105px" }}>
       <label>{label}</label>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <input className="input" value={f[key]} placeholder={placeholder || ""} onChange={(e) => set(key, e.target.value)} />
@@ -2239,6 +3473,14 @@ function CombineCapturePanel({ session, state, actions, today }) {
   const weighted = (n, id, rx, why, prefix) => step(n, state.exercises[id].name, rx, why, [
     input(prefix + "Weight", "Record weight", "lb"), input(prefix + "Reps", "Record reps", "reps"), input(prefix + "Rir", "Reps left", "RIR")
   ]);
+  const deferredStep = (item, n) => {
+    const ex = state.exercises[item.id];
+    if (!ex) return null;
+    if (item.id === "pullup") return step(n, "Strict pull-ups", item.sr || "1 max clean set", item.note || "Deferred from the earlier combine session.", [input("pullupMax", "Record max", "reps")]);
+    if (item.id === "exPull") return step(n, "Explosive pull-ups", item.sr || "3 × 2 · full rest", item.note || "Deferred from the earlier combine session.", [input("exPullHeight", "Best height / landmark", "", "e.g. lower chest to bar")]);
+    if (item.id === "benchA") return step(n, "Barbell bench press", item.sr || "Build to 1 crisp × 5", item.note || "Deferred from the earlier combine session.", [input("benchWeight", "Record weight", "lb"), input("benchReps", "Record reps", "reps"), input("benchRir", "Reps left", "RIR")]);
+    return step(n, ex.name, item.sr || "deferred dose", item.note || "Deferred from an earlier plan.", null);
+  };
   const saveWeighted = (id, prefix) => {
     const w = num(prefix + "Weight"), reps = num(prefix + "Reps"), rir = num(prefix + "Rir");
     if (w != null) { actions.setExerciseWeight(id, w); actions.saveCalValue(id, String(w)); }
@@ -2247,55 +3489,61 @@ function CombineCapturePanel({ session, state, actions, today }) {
   let rows = [];
   if (session.id === "CAL_UP") rows = [
     step(1, "Morning measurements", "Bodyweight + waist", "Capture the starting point before training. Same conditions make future comparisons useful.", [input("bodyweight", "Bodyweight", "lb"), input("waist", "Waist at navel", "in")]),
-    step(2, "Barbell bench press", "Build to 1 crisp × 5", "Ramp up gradually. Stop with about 2–3 clean reps still available. This is a baseline, not a max.", [input("benchWeight", "Record weight", "lb"), input("benchReps", "Record reps", "reps"), input("benchRir", "Reps left", "RIR")]),
-    step(3, "Strict pull-ups", "1 max clean set", "Dead hang to chin over bar. Stop when the next rep would lose the standard.", [input("pullupMax", "Record max", "reps")]),
-    step(4, "Push-ups", "1 max clean set", "Use one consistent technique and stop at technical failure.", [input("pushupMax", "Record max", "reps")]),
-    step(5, "Explosive pull-ups", "3 × 2 · full rest", "Pull as high as possible while fresh. We care about your best repeatable landmark, not fatigue reps.", [input("exPullHeight", "Best height / landmark", "", "e.g. lower chest to bar")]),
-  ];
+    showCalItem("benchA") && step(2, "Barbell bench press", "Build to 1 crisp × 5", "Ramp up gradually. Stop with about 2–3 clean reps still available. This is a baseline, not a max.", [input("benchWeight", "Record weight", "lb"), input("benchReps", "Record reps", "reps"), input("benchRir", "Reps left", "RIR")]),
+    showCalItem("pullup") && step(3, "Strict pull-ups", "1 max clean set", "Dead hang to chin over bar. Stop when the next rep would lose the standard.", [input("pullupMax", "Record max", "reps")]),
+    showCalItem("pushup") && step(4, "Push-ups", "1 max clean set", "Use one consistent technique and stop at technical failure.", [input("pushupMax", "Record max", "reps")]),
+    showCalItem("exPull") && step(5, "Explosive pull-ups", "3 × 2 · full rest", "Pull as high as possible while fresh. We care about your best repeatable landmark, not fatigue reps.", [input("exPullHeight", "Best height / landmark", "", "e.g. lower chest to bar")]),
+  ].filter(Boolean);
   if (session.id === "CAL_LOW") rows = [
-    weighted(1, "rdl", "2–3 calibration sets", "Find the load that leaves about 2–3 clean reps in reserve.", "rdl"),
-    weighted(2, "hipThrust", "2–3 calibration sets", "Find a clean repeatable working weight, not a grinder.", "hipThrust"),
-    weighted(3, "hamCurl", "2 × 10–12", "Stop with 2–3 reps available.", "hamCurl"),
-    weighted(4, "calfRaise", "2 × 12–15", "Controlled full-range reps.", "calfRaise"),
-    weighted(5, "tibRaise", "2 × 15–20", "Controlled reps; establish a repeatable setup.", "tibRaise"),
-    weighted(6, "stepUp", "2 easy test sets", "Tolerance check only. If the knee objects, stop and record it rather than forcing the test.", "stepUp"),
+    showCalItem("rdl") && weighted(1, "rdl", "2–3 calibration sets", "Find the load that leaves about 2–3 clean reps in reserve.", "rdl"),
+    showCalItem("hipThrust") && weighted(2, "hipThrust", "2–3 calibration sets", "Find a clean repeatable working weight, not a grinder.", "hipThrust"),
+    showCalItem("hamCurl") && weighted(3, "hamCurl", "2 × 10–12", "Stop with 2–3 reps available.", "hamCurl"),
+    showCalItem("calfRaise") && weighted(4, "calfRaise", "2 × 12–15", "Controlled full-range reps.", "calfRaise"),
+    showCalItem("tibRaise") && weighted(5, "tibRaise", "2 × 15–20", "Controlled reps; establish a repeatable setup.", "tibRaise"),
+    showCalItem("stepUp") && weighted(6, "stepUp", "2 easy test sets", "Tolerance check only. If the knee objects, stop and record it rather than forcing the test.", "stepUp"),
     step(7, "Broad jump · optional", "Only if fully pain-free", "One or two quality measurements are enough. Skip it if the knee is uncertain.", [input("broadJump", "Best distance", "in")]),
-  ];
+    step(8, "Vertical / max-touch · optional", "Only if fully pain-free", "Record a standing vertical or a repeatable max-touch landmark. No fatigue sets, no dunk attempts, no knee negotiation.", [input("verticalJump", "Best jump / max touch", "in / landmark")]),
+  ].filter(Boolean);
   if (session.id === "CAL_TRACK") rows = [
     step(1, "Measure the track", "Laps per mile + usable straight", "This lets later speed work use the space accurately instead of guessing.", [input("trackLaps", "Laps per mile", "laps"), input("trackStraight", "Straight length", "yd")]),
     step(2, "Easy aerobic run", "30–40 min conversational", "Keep it truly easy. Finish with 2–3 relaxed strides on the straight if everything feels normal.", [input("easyMinutes", "Actual minutes", "min")]),
   ];
   if (session.id === "CAL_ACCA") rows = [
-    weighted(1, "csRow", "2 × 8–10", "Find a conservative working load with 2–3 reps in reserve.", "csRow"),
-    weighted(2, "inclineDb", "2 × 8–10", "Clean reps; leave 2–3 in reserve.", "inclineDb"),
-    weighted(3, "latRaise", "2 × 12–15", "Smooth reps with no swinging or grinding.", "latRaise"),
-    weighted(4, "hammer", "2 × 10–12", "Find a repeatable starting load.", "hammer"),
-    weighted(5, "pressdown", "2 × 10–12", "Find a repeatable starting load.", "pressdown"),
-  ];
+    showCalItem("csRow") && weighted(1, "csRow", "2 × 8–10", "Find a conservative working load with 2–3 reps in reserve.", "csRow"),
+    showCalItem("inclineDb") && weighted(2, "inclineDb", "2 × 8–10", "Clean reps; leave 2–3 in reserve.", "inclineDb"),
+    showCalItem("latRaise") && weighted(3, "latRaise", "2 × 12–15", "Smooth reps with no swinging or grinding.", "latRaise"),
+    showCalItem("hammer") && weighted(4, "hammer", "2 × 10–12", "Find a repeatable starting load.", "hammer"),
+    showCalItem("pressdown") && weighted(5, "pressdown", "2 × 10–12", "Find a repeatable starting load.", "pressdown"),
+  ].filter(Boolean);
   if (session.id === "CAL_ACCC") rows = [
-    weighted(1, "pulldown", "2 × 8–10", "Conservative load with 2–3 reps in reserve.", "pulldown"),
-    weighted(2, "cableRow1", "2 × 10 / side", "Controlled and symmetrical.", "cableRow1"),
-    weighted(3, "ohp", "2 × 8–10", "Find a clean starting load without grinding.", "ohp"),
-    weighted(4, "incCurl", "2 × 10–12", "Repeatable starting load.", "incCurl"),
-    weighted(5, "ohTri", "2 × 10–12", "Repeatable starting load.", "ohTri"),
-    weighted(6, "facePull", "2 × 12–15", "Controlled shoulder-friendly reps.", "facePull"),
+    showCalItem("pulldown") && weighted(1, "pulldown", "2 × 8–10", "Conservative load with 2–3 reps in reserve.", "pulldown"),
+    showCalItem("cableRow1") && weighted(2, "cableRow1", "2 × 10 / side", "Controlled and symmetrical.", "cableRow1"),
+    showCalItem("ohp") && weighted(3, "ohp", "2 × 8–10", "Find a clean starting load without grinding.", "ohp"),
+    showCalItem("incCurl") && weighted(4, "incCurl", "2 × 10–12", "Repeatable starting load.", "incCurl"),
+    showCalItem("ohTri") && weighted(5, "ohTri", "2 × 10–12", "Repeatable starting load.", "ohTri"),
+    showCalItem("facePull") && weighted(6, "facePull", "2 × 12–15", "Controlled shoulder-friendly reps.", "facePull"),
     step(7, "Muscle-up transition trial", "2–3 × 3 band-assisted", "Skill test only. Record which band/setup lets you move cleanly; do not turn this into failure work.", [input("muBand", "Band / setup", "", "e.g. medium band")]),
-  ];
+  ].filter(Boolean);
+
+  const nativeIds = new Set(((session.variants && session.variants[60]) || []).map((r) => r[0]));
+  const extraRows = addedItems.filter((a) => !nativeIds.has(a.id)).map((a, i) => deferredStep(a, rows.length + i + 1)).filter(Boolean);
+  if (extraRows.length) rows = rows.concat(extraRows);
 
   const save = () => {
     if (session.id === "CAL_UP") {
       if (num("bodyweight") != null) { actions.saveCalValue("bodyweight", f.bodyweight); actions.logMetric("bodyweight", num("bodyweight"), today); }
       if (num("waist") != null) { actions.saveCalValue("waist", f.waist); actions.logMetric("waist", num("waist"), today); }
       const bw = num("benchWeight"), br = num("benchReps"), rir = num("benchRir");
-      if (bw != null) { actions.setExerciseWeight("benchA", bw); actions.saveCalValue("benchBaseline", bw + " × " + (br == null ? 5 : br)); }
-      if (bw != null || br != null || rir != null) actions.logExerciseSet("benchA", today, { weight: bw, reps: br, rir, note: "Combine upper baseline" });
-      if (num("pullupMax") != null) { actions.saveCalValue("pullupMax", f.pullupMax); actions.logMetric("pullup", num("pullupMax"), today); }
-      if (num("pushupMax") != null) actions.saveCalValue("pushupMax", f.pushupMax);
-      if (String(f.exPullHeight).trim()) actions.saveCalValue("exPullHeight", f.exPullHeight);
+      if (showCalItem("benchA") && bw != null) { actions.setExerciseWeight("benchA", bw); actions.saveCalValue("benchBaseline", bw + " × " + (br == null ? 5 : br)); }
+      if (showCalItem("benchA") && (bw != null || br != null || rir != null)) actions.logExerciseSet("benchA", today, { weight: bw, reps: br, rir, note: "Combine upper baseline" });
+      if (showCalItem("pullup") && num("pullupMax") != null) { actions.saveCalValue("pullupMax", f.pullupMax); actions.logMetric("pullup", num("pullupMax"), today); }
+      if (showCalItem("pushup") && num("pushupMax") != null) actions.saveCalValue("pushupMax", f.pushupMax);
+      if (showCalItem("exPull") && String(f.exPullHeight).trim()) actions.saveCalValue("exPullHeight", f.exPullHeight);
     }
     if (session.id === "CAL_LOW") {
       [["rdl","rdl"],["hipThrust","hipThrust"],["hamCurl","hamCurl"],["calfRaise","calfRaise"],["tibRaise","tibRaise"],["stepUp","stepUp"]].forEach(([id,prefix]) => saveWeighted(id,prefix));
       if (num("broadJump") != null) actions.saveCalValue("broadJump", f.broadJump);
+      if (String(f.verticalJump).trim()) actions.saveCalValue("verticalJump", f.verticalJump);
     }
     if (session.id === "CAL_TRACK") {
       if (num("trackLaps") != null) actions.saveCalValue("trackLaps", f.trackLaps);
@@ -2303,7 +3551,11 @@ function CombineCapturePanel({ session, state, actions, today }) {
     }
     if (session.id === "CAL_ACCA") [["csRow","csRow"],["inclineDb","inclineDb"],["latRaise","latRaise"],["hammer","hammer"],["pressdown","pressdown"]].forEach(([id,prefix]) => saveWeighted(id,prefix));
     if (session.id === "CAL_ACCC") [["pulldown","pulldown"],["cableRow1","cableRow1"],["ohp","ohp"],["incCurl","incCurl"],["ohTri","ohTri"],["facePull","facePull"]].forEach(([id,prefix]) => saveWeighted(id,prefix));
-    const exerciseIds = (session.variants && session.variants[60] ? session.variants[60].map((r) => r[0]) : []);
+    if (session.id !== "CAL_UP") {
+      if (addedIds.has("pullup") && num("pullupMax") != null) { actions.saveCalValue("pullupMax", f.pullupMax); actions.logMetric("pullup", num("pullupMax"), today); }
+      if (addedIds.has("exPull") && String(f.exPullHeight).trim()) actions.saveCalValue("exPullHeight", f.exPullHeight);
+    }
+    const exerciseIds = Array.from(new Set((session.variants && session.variants[60] ? session.variants[60].map((r) => r[0]) : []).concat(Array.from(addedIds)))).filter((id) => !removedIds.has(id));
     actions.completeSession(today, session.id, { status: "completed", feel: "Appropriate", note: f.note || "Combine baseline captured", duration: session.id === "CAL_TRACK" ? (num("easyMinutes") || 35) : 45, exercisesCompleted: exerciseIds, exercisesSkipped: [], data: { combine: { ...f } } });
   };
   return (
@@ -2328,7 +3580,7 @@ function CombineCapturePanel({ session, state, actions, today }) {
 }
 
 function WorkoutPanel({ session, tier, state, actions, today, onDone, autoOverride }) {
-  const override = mergeDayOverrides(autoOverride, (state.dayWorkoutOverrides || {})[today]);
+  const override = mergeDayOverrides(resizeGoalOverrideForTier(autoOverride, tier, state), (state.dayWorkoutOverrides || {})[today]);
   const effectiveTier = override.tier || tier;
   const list = effectiveList(session, effectiveTier, state.sessionMods, override) || [];
   const signature = list.map((r) => r[0]).join("|") + ":" + effectiveTier;
@@ -2352,8 +3604,9 @@ function WorkoutPanel({ session, tier, state, actions, today, onDone, autoOverri
   const save = () => {
     const completedIds = list.map((r) => r[0]).filter((id) => doneMap[id] !== false);
     const skippedIds = list.map((r) => r[0]).filter((id) => doneMap[id] === false);
-    const payload = { feel, note, markers, extras: {}, data: {}, duration: effectiveTier, exercisesCompleted: completedIds, exercisesSkipped: skippedIds, status: skippedIds.length ? "partial" : "completed", sessionRpe: FEEL_RPE[feel] || null };
-    if (session.kind === "run") payload.completionFraction = 1;
+    const actualDuration = override.availableMinutes != null ? Number(override.availableMinutes) : effectiveTier;
+    const payload = { feel, note, markers, extras: {}, data: {}, duration: actualDuration, exercisesCompleted: completedIds, exercisesSkipped: skippedIds, status: skippedIds.length ? "partial" : "completed", sessionRpe: FEEL_RPE[feel] || null };
+    if (session.kind === "run") payload.completionFraction = actualDuration < 15 ? .5 : 1;
     if (session.addOn && addOnOn) payload.extras[session.addOn.key] = true;
     if (cbSlotOk && cbOn) payload.extras.cbSkill = true;
     if (isA && completedIds.includes("benchA")) {
@@ -2396,48 +3649,11 @@ function WorkoutPanel({ session, tier, state, actions, today, onDone, autoOverri
   );
 }
 
-function SkipModal({ onClose, onSkip }) {
-  const reasons = ["Work", "Travel", "Fatigue", "Soreness", "Injury / pain", "Personal", "Other"];
-  return (
-    <Modal onClose={onClose}>
-      <div className="eyebrow">Skip today</div>
-      <h2 className="sec" style={{ marginTop: 6 }}>No streak to lose here</h2>
-      <p className="small dim" style={{ marginTop: 4 }}>The session stays outstanding and the rest of the week re-plans around it. Reason is optional — it just sharpens future scheduling.</p>
-      <div className="chips" style={{ marginTop: 14 }}>
-        {reasons.map((r) => (
-          <button key={r} className="chip" onClick={() => onSkip(r)}>{r}</button>
-        ))}
-      </div>
-      <div className="btnrow">
-        <button className="btn subtle" onClick={() => onSkip("")}>Skip without a reason</button>
-        <button className="btn subtle" onClick={onClose}>Cancel</button>
-      </div>
-    </Modal>
-  );
-}
-
-function MoveModal({ plan, today, slotId, onClose, onMove }) {
-  const options = plan.days.filter((d) => d.date > today && (d.status === "planned" || d.status === "rest"));
-  return (
-    <Modal onClose={onClose}>
-      <div className="eyebrow">Move session</div>
-      <h2 className="sec" style={{ marginTop: 6 }}>Pick its new home</h2>
-      <p className="small dim" style={{ marginTop: 4 }}>Everything else re-plans around the pin — recovery rules included.</p>
-      <div className="chips" style={{ marginTop: 14 }}>
-        {options.map((d) => (
-          <button key={d.date} className="chip" onClick={() => onMove(d.date)}>{fmtShort(d.date)}</button>
-        ))}
-        {options.length === 0 && <span className="small faint">No open days left this week — skip instead and next week's plan front-loads it.</span>}
-      </div>
-      <div className="btnrow"><button className="btn subtle" onClick={onClose}>Cancel</button></div>
-    </Modal>
-  );
-}
-
-function BudgetLedger({ done, compact }) {
-  const rows = compact
-    ? BUDGET_DEF.filter((b) => ["upperStrength", "qualityRun", "lowerAthletic", "coreMobility"].includes(b.key))
-    : BUDGET_DEF;
+function BudgetLedger({ done, compact, budgetDef }) {
+  const source = budgetDef || BUDGET_DEF;
+  const compactKeys = ["pressStrength","verticalPull","qualityRun","lowerStrength","verticalPower","upperStrength","lowerAthletic","coreMobility"];
+  const activeRows = source.filter((b) => Number(b.target || 0) > 0 || Number((done || {})[b.key] || 0) > 0);
+  const rows = compact ? activeRows.filter((b) => compactKeys.includes(b.key)) : activeRows;
   return (
     <div>
       {rows.map((b) => {
@@ -2468,12 +3684,10 @@ function TodayView({ state, actions, plan, today, setTab }) {
   const dayPlan = plan.days.find((d) => d.date === today) || { status: "rest", id: null, reasons: [] };
   const session = dayPlan.id ? SESSIONS[dayPlan.id] : null;
   const phase = phaseOf(today);
-  const availToday = state.settings.weekdayMinutes[dowMon0(today)];
+  const availToday = pr5AvailabilityForDate(state.settings, state, today);
   const defaultTier = snapTier(availToday == null ? 60 : availToday);
   const [tier, setTier] = useState(defaultTier);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [skipOpen, setSkipOpen] = useState(false);
-  const [moveOpen, setMoveOpen] = useState(false);
   const mergedOverride = mergeDayOverrides(dayPlan.autoOverride, (state.dayWorkoutOverrides || {})[today]);
   const coachTier = mergedOverride.tier;
   useEffect(() => { setTier(coachTier || defaultTier); setPanelOpen(false); }, [today, dayPlan.id, coachTier, defaultTier]);
@@ -2498,12 +3712,10 @@ function TodayView({ state, actions, plan, today, setTab }) {
           <div>
             <div className="eyebrow" style={{ color: "var(--accent)" }}>TODAY'S WORKOUT · {fmtLong(today)} · {PHASES[phase].chip}</div>
             <h1 className="big">
-              {completed ? (partial ? "Partially banked: " : "Banked: ") + session.short + (partial ? "" : " ✓")
-                : session ? session.name
-                : "Open day"}
+              {completed ? (partial ? "Partially banked: " : "Banked: ") + (dayPlan.displayShort || session.short) + (partial ? "" : " ✓")
+                : dayPlan.displayName || (session ? session.name : "Open day")}
             </h1>
           </div>
-          <KneeSelector knee={state.settings.knee} setKnee={actions.setKnee} />
         </div>
 
         {phase === "pre" && (
@@ -2514,11 +3726,12 @@ function TodayView({ state, actions, plan, today, setTab }) {
 
         {!completed && session && (
           <div style={{ marginTop: 8 }}>
-            <p className="dim" style={{ fontSize: 13.5 }}>{session.desc}</p>
+            <p className="dim" style={{ fontSize: 13.5 }}>{dayPlan.displayDesc || session.desc}</p>
             <Collapse title="Why the trainer chose this today">
               {dayPlan.reasons.length ? dayPlan.reasons.map((r, i) => (<p key={i} style={{ marginTop: i ? 5 : 0 }}>{r}</p>)) : <p>This is the highest-priority safe session for the current block.</p>}
               {dayPlan.pinned && <p style={{ marginTop: 5 }}>Pinned here by you.</p>}
             </Collapse>
+            <DayImpactBox day={dayPlan} plan={plan} />
 
             {!isCal && (session.variants || (mergedOverride.add && mergedOverride.add.length)) && (
               <div style={{ marginTop: 16 }}>
@@ -2533,7 +3746,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
                 </div>
                 {tier === 15 && <p className="small dim" style={{ marginTop: 8 }}>Not a failed version of the long workout — the highest-priority stimulus, preserved on a busy day.</p>}
                 {mergedOverride.reason && <p className="small" style={{ color: "var(--accent)", marginTop: 8 }}>{mergedOverride.reason}</p>}
-                <ExerciseList session={session} tier={tier} state={state} date={today} autoOverride={dayPlan.autoOverride} goCalibrate={() => setTab("SETTINGS")} />
+                <ExerciseList session={session} tier={tier} state={state} date={today} autoOverride={dayPlan.autoOverride} goCalibrate={() => setTab("CALIBRATION")} />
               </div>
             )}
 
@@ -2550,7 +3763,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
             )}
 
             {isCal && !completed && (
-              <CombineCapturePanel key={session.id} session={session} state={state} actions={actions} today={today} />
+              <CombineCapturePanel key={session.id + ":" + (mergedOverride.reason || "")} session={session} state={state} actions={actions} today={today} dayOverride={mergedOverride} />
             )}
 
             {showCB && (
@@ -2565,20 +3778,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
             {!isCal && !panelOpen && (
               <div className="btnrow">
                 <button className="btn primary" onClick={() => { actions.startWorkout(today, session.id, tier); setPanelOpen(true); }}><Zap size={15} /> Start Workout</button>
-                <button className="btn" onClick={() => setPanelOpen(true)}><Check size={15} /> Complete Workout</button>
-                {session.required !== false && session.kind !== "recovery" && (
-                  <button className="btn subtle" onClick={() => setSkipOpen(true)}>Skip Today</button>
-                )}
-                <button className="btn subtle" onClick={() => setMoveOpen(true)}>Move / Reschedule</button>
-              </div>
-            )}
-            {!isCal && !panelOpen && (
-              <div className="btnrow" style={{ marginTop: 8 }}>
-                <button className="btn warn sm" onClick={() => actions.setKnee("irritated")}><AlertTriangle size={13} /> Knee Doesn't Feel Good</button>
-                <button className="btn subtle sm" onClick={() => actions.flagExhausted(today)}><Moon size={13} /> I'm Exhausted</button>
-                {session.variants && tier < 60 && (
-                  <button className="btn subtle sm" onClick={() => setTier(tier === 15 ? 25 : tier === 25 ? 40 : 60)}><Plus size={13} /> I Have More Time Than Expected</button>
-                )}
+                <button className="btn" onClick={() => setPanelOpen(true)}><Check size={15} /> Log Workout</button>
               </div>
             )}
           </div>
@@ -2591,7 +3791,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
         {completed && (
           <div style={{ marginTop: 8 }}>
             <p className="dim" style={{ fontSize: 13.5 }}>
-              {partial ? "Partial work is banked; omitted important stimuli can be recovered later" : "Today's work is in the bank"}{dayPlan.entry && dayPlan.entry.feel ? " — felt " + dayPlan.entry.feel.toLowerCase() : ""}. Optional add-on: 8 minutes of post-session mobility below.
+              {partial ? "Partial work is banked; omitted important stimuli can be recovered later" : "Today's work is in the bank"}{dayPlan.entry && dayPlan.entry.feel ? " — felt " + dayPlan.entry.feel.toLowerCase() : ""}. Tell Coach anything that should affect the next recommendation.
             </p>
             <div className="btnrow">
               <button className="btn subtle sm" onClick={() => actions.undoDay(today)}>Undo today's log</button>
@@ -2604,18 +3804,14 @@ function TodayView({ state, actions, plan, today, setTab }) {
         <WorkoutPanel session={session} tier={tier} state={state} actions={actions} today={today} autoOverride={dayPlan.autoOverride} onDone={() => setPanelOpen(false)} />
       )}
 
-      <WeeklyCheckinCard state={state} actions={actions} today={today} />
-      <HelpCard state={state} actions={actions} />
-
       <div className="grid2">
         <div className="card">
           <div className="eyebrow">This week's budget</div>
           <div style={{ marginTop: 8 }}>
-            <BudgetLedger done={plan.done} compact />
+            <BudgetLedger done={plan.done} compact budgetDef={plan.budgetDef} />
           </div>
           <p className="small dim" style={{ marginTop: 10 }}>{plan.message}</p>
           <div className="btnrow">
-            <button className="btn sm" onClick={actions.recalc}><RefreshCw size={13} /> Recalculate My Week</button>
             <button className="btn subtle sm" onClick={() => setTab("ROADMAP")}>Roadmap →</button>
           </div>
         </div>
@@ -2632,43 +3828,191 @@ function TodayView({ state, actions, plan, today, setTab }) {
           <p className="small dim" style={{ marginTop: 6 }}>
             {state.settings.knee === "irritated"
               ? "Knee is flagged: impact and provoking lower work are swapped out until you clear it. Pain-free posterior chain and low-impact cardio keep the block moving."
-              : "Accumulate the adaptations. Do not protect the streak. If sleep or the job wrecked you, the Exhausted button is the strong move, not the weak one."}
+              : "Accumulate the adaptations. Do not protect the streak. If sleep, soreness, pain, work or travel changes the day, tell Coach and the week will reflow around the real signal."}
           </p>
         </div>
       </div>
-
-      <div className="card">
-        <div className="eyebrow">Warm-ups & mobility</div>
-        <div style={{ marginTop: 6 }}>
-          {MOBILITY_BLOCKS.map((m) => (
-            <Collapse key={m.id} title={m.title}><p>{m.body}</p></Collapse>
-          ))}
-        </div>
-      </div>
-
-      {skipOpen && (
-        <SkipModal onClose={() => setSkipOpen(false)} onSkip={(r) => { actions.skipSession(today, session.id, r); setSkipOpen(false); }} />
-      )}
-      {moveOpen && session && (
-        <MoveModal plan={plan} today={today} slotId={slot} onClose={() => setMoveOpen(false)}
-          onMove={(d) => { actions.pinSession(d, slot); setMoveOpen(false); }} />
-      )}
     </div>
   );
 }
 
 /* ------------------------------- WEEK VIEW ------------------------------- */
 
+function fmtCredit(v) {
+  const n = Number(v || 0);
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+}
+
+function GoalPills({ goalKeys, limit = 3 }) {
+  const keys = (goalKeys || []).slice(0, limit);
+  if (!keys.length) return null;
+  return (
+    <div className="goalchips">
+      {keys.map((k) => <span className="goalchip" key={k}>{pr5GoalLabel(k)}</span>)}
+    </div>
+  );
+}
+
+function constraintText(day) {
+  const c = (day.autoOverride && day.autoOverride.constraints) || {};
+  const bits = [];
+  if (day.availableMinutes != null && day.availableMinutes < 15) bits.push(day.availableMinutes + "-minute micro window");
+  else if (day.availableMinutes != null) bits.push(day.availableMinutes + " minutes available");
+  if (c.travel) bits.push("travel");
+  if (c.noGym) bits.push("no gym");
+  if (c.noEquipment) bits.push("no equipment");
+  return bits.join(" · ");
+}
+
+function DayImpactBox({ day, plan }) {
+  const modules = pr5DayModules(day);
+  const goalKeys = pr5DayGoalKeys(day);
+  const budgetRows = (plan.budgetDef || []).filter((b) => modules.includes(b.key) && Number(b.target || 0) > 0);
+  const isMicro = day.id === "MICRO" || day.id === "MICRORUN" || Number(day.availableMinutes || 0) < 15;
+  const constraints = constraintText(day);
+  if (!modules.length && !goalKeys.length && !constraints) return null;
+  return (
+    <div className="impactbox">
+      <div className="eyebrow" style={{ color: "var(--accent)" }}>Goal impact</div>
+      <GoalPills goalKeys={goalKeys} limit={4} />
+      {modules.length > 0 && <p className="small dim" style={{ marginTop: 8 }}>Stimulus: {modules.map(pr5ModuleLabel).join(" + ")}{isMicro ? " · partial credit, remaining gap stays forecasted" : ""}.</p>}
+      {budgetRows.length > 0 && (
+        <div className="miniBudget">
+          {budgetRows.map((b) => {
+            const before = Number((plan.done || {})[b.key] || 0);
+            const projected = Number(((plan.projected || plan.done || {})[b.key]) || 0);
+            return <span key={b.key}>{b.label}: {fmtCredit(before)} done / {fmtCredit(projected)} forecast / {fmtCredit(b.target)} target</span>;
+          })}
+        </div>
+      )}
+      {constraints && <p className="small faint" style={{ marginTop: 8 }}>Constraint: {constraints}. The plan adapts the dose; it does not delete the goal.</p>}
+    </div>
+  );
+}
+
+function RoadmapForecastPanel({ plan }) {
+  if (!plan || plan.calMode) {
+    return (
+      <div className="impactbox" style={{ marginTop: 12 }}>
+        <div className="eyebrow" style={{ color: "var(--accent)" }}>Forecast readiness</div>
+        <p className="small dim" style={{ marginTop: 6 }}>You are still in the combine/setup block, so future workouts use conservative defaults. As soon as baselines and early workout feedback are logged, the Roadmap gets sharper about loads, pace, tolerance and goal pressure.</p>
+      </div>
+    );
+  }
+  const budget = plan.budgetDef || [];
+  const projected = plan.projected || plan.done || {};
+  const pct = plan.forecastPct != null ? plan.forecastPct : pr5BudgetPct(projected, budget);
+  const keyRows = budget.filter((b) => Number(b.target || 0) > 0 && !b.optional).slice(0, 8);
+  const covered = keyRows.filter((b) => Number(projected[b.key] || 0) >= Number(b.min || 0)).length;
+  return (
+    <div className="impactbox" style={{ marginTop: 12 }}>
+      <div className="eyebrow" style={{ color: "var(--accent)" }}>Dec 31 forecast check</div>
+      <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 12, alignItems: "center", marginTop: 8 }}>
+        <div>
+          <div className="num" style={{ fontSize: 24, color: pct >= 85 ? "var(--good)" : "var(--ice)" }}>{pct}%</div>
+          <p className="small faint">weekly coverage</p>
+        </div>
+        <div>
+          <Bar val={pct} max={100} full={pct >= 100} />
+          <p className="small dim" style={{ marginTop: 6 }}>{covered} / {keyRows.length} required stimulus floors are covered by the current forecast. Micro-days can help, but they leave partial gaps for later in the week.</p>
+        </div>
+      </div>
+      <div className="miniBudget" style={{ marginTop: 10 }}>
+        {keyRows.map((b) => <span key={b.key}>{b.label}: {fmtCredit(projected[b.key])}/{fmtCredit(b.target)}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function WorkoutPrescriptionPreview({ day, session, tier, state, setTab, onClose }) {
+  if (!session) return null;
+  const userOverride = day.date ? (state.dayWorkoutOverrides || {})[day.date] : null;
+  const override = mergeDayOverrides(day.autoOverride, userOverride);
+  const effectiveTier = override.tier || tier;
+  const list = effectiveList(session, effectiveTier, state.sessionMods, override) || [];
+  const slot = SLOT_OF[session.id];
+  const isRun = session.kind === "run";
+  const runRx = isRun ? (override.runOverride || runRxFor(day.date, slot)) : null;
+  const runExerciseIds = new Set(["microRun", "easyAerobic20"]);
+  const visibleList = runRx ? list.filter(([exId]) => !runExerciseIds.has(exId)) : list;
+  const minutes = override.availableMinutes != null ? Number(override.availableMinutes) : (day.availableMinutes != null ? Number(day.availableMinutes) : effectiveTier);
+  const isMicro = session.id === "MICRO" || session.id === "MICRORUN" || minutes < 15;
+  const moduleLabels = Array.from(new Set(override.modules || [])).map(pr5ModuleLabel);
+  const goCalibrate = () => { onClose(); setTab("CALIBRATION"); };
+  if (!runRx && !visibleList.length) return null;
+  return (
+    <div className="rxbox">
+      <div className="rxhead">
+        <div>
+          <div className="eyebrow" style={{ color: "var(--accent)" }}>Workout prescription</div>
+          <div className="rxsub">
+            {isMicro ? "Short-window dose for this exact date." : "The current forecast for this date, based on goals, time, recovery and logged feedback."}
+          </div>
+        </div>
+        <span className={isMicro ? "mes" : "badge"}>{minutes ? minutes + " min" : tierLabel(effectiveTier)}</span>
+      </div>
+      {moduleLabels.length > 0 && <p className="small dim" style={{ marginTop: 9 }}>Modules: {moduleLabels.join(" + ")}</p>}
+      {override.reason && <p className="small" style={{ color: "var(--accent)", marginTop: 7 }}>{override.reason}</p>}
+      {runRx && (
+        <div className="rxrun">
+          <div className="rxidx"><Activity size={14} /></div>
+          <div>
+            <div className="rxname">Run / cardio prescription</div>
+            <div className="rxdetail"><span className="num">{runRx}</span></div>
+            <p className="small faint" style={{ marginTop: 5 }}>{EFFORT_GUIDE}</p>
+          </div>
+        </div>
+      )}
+      {visibleList.length > 0 && (
+        <div className="rxlist">
+          {visibleList.map(([exId, sr, note], i) => {
+            const ex = state.exercises[exId];
+            const rest = restOf(session, exId);
+            const showRest = rest && !String(note || "").toLowerCase().includes("rest");
+            return (
+              <div className="rxrow" key={i}>
+                <div className="rxidx num">{i + 1}</div>
+                <div>
+                  <div className="rxname">{ex ? ex.name : exId}</div>
+                  <div className="rxdetail"><span className="num">{sr}</span>{showRest ? " · rest " + rest : ""}{note ? " · " + note : ""}</div>
+                </div>
+                {exerciseLoadChip(state, exId, goCalibrate)}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="small faint" style={{ marginTop: 10 }}>
+        If this becomes a miss, half-session, travel day or equipment problem, tell Coach and the remaining stimuli will be reflowed.
+      </p>
+    </div>
+  );
+}
+
+function ConstraintPlaybook() {
+  const rows = [
+    ["6–8 min", "Fast mile / hard run micro-dose", "Mile + 5K signal, partial credit only"],
+    ["Hotel only", "Push-up, core, calf/landing or easy run", "Keeps press, trunk, lower-leg or aerobic goals warm"],
+    ["No gym", "Portable bodyweight version first", "Heavy strength gap stays forecasted for the next real slot"],
+  ];
+  return (
+    <div className="grid3" style={{ marginTop: 12 }}>
+      {rows.map((r) => (
+        <div className="kpi" key={r[0]}>
+          <div className="eyebrow" style={{ color: "var(--accent)" }}>{r[0]}</div>
+          <div style={{ fontWeight: 800, fontSize: 14, marginTop: 4 }}>{r[1]}</div>
+          <p className="small dim" style={{ marginTop: 5 }}>{r[2]}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SessionDetailModal({ day, state, actions, plan, today, setTab, onClose }) {
   const session = day.id ? SESSIONS[day.id] : null;
-  const slot = session ? SLOT_OF[session.id] : null;
-  const [tier, setTier] = useState(snapTier(state.settings.weekdayMinutes[dowMon0(day.date)] == null ? 60 : state.settings.weekdayMinutes[dowMon0(day.date)]));
+  const dayMinutes = day.availableMinutes != null ? day.availableMinutes : pr5AvailabilityForDate(state.settings, state, day.date);
+  const tier = day.autoOverride && day.autoOverride.tier ? day.autoOverride.tier : snapTier(dayMinutes);
   const entry = state.log.filter((e) => e.date === day.date && (e.status === "completed" || e.status === "partial")).slice(-1)[0];
-  const inThisWeek = weekStartOf(day.date) === plan.weekStart;
-  const moveTargets = inThisWeek && day.status === "planned" && slot && SLOT_OF[day.id] !== "REC"
-    ? plan.days.filter((d) => d.date !== day.date && d.date >= today && (d.status === "planned" || d.status === "rest"))
-    : [];
-  const isRun = session && session.kind === "run";
   const isCal = session && session.kind === "cal";
   const isRec = session && (session.kind === "recovery");
   return (
@@ -2676,35 +4020,30 @@ function SessionDetailModal({ day, state, actions, plan, today, setTab, onClose 
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
         <div>
           <div className="eyebrow">{fmtLong(day.date)}</div>
-          <h2 className="sec" style={{ marginTop: 4, fontSize: 18 }}>{session ? session.name : "Rest day"}</h2>
+          <h2 className="sec" style={{ marginTop: 4, fontSize: 18 }}>{day.displayName || (session ? session.name : "Rest day")}</h2>
         </div>
         <button className="btn subtle sm" onClick={onClose} style={{ alignSelf: "flex-start" }}><X size={14} /></button>
       </div>
       <div style={{ marginTop: 4 }}>
         <span className="badge" style={day.status === "completed" ? { color: "var(--good)", borderColor: "rgba(67,201,138,.4)" } : {}}>
-          {day.status === "completed" ? "COMPLETED" : day.status === "partial" ? "PARTIAL" : day.status === "skipped" ? "MOVED ON" : day.status === "planned" ? (weekStartOf(day.date) === plan.weekStart ? "PLANNED" : "PROJECTED") : day.status === "past" ? "NOT LOGGED" : "OPEN"}
+          {day.status === "completed" ? "COMPLETED" : day.status === "partial" ? "PARTIAL" : day.status === "skipped" ? "REFLOWED" : day.status === "planned" ? (weekStartOf(day.date) === plan.weekStart ? "PLANNED" : "PROJECTED") : day.status === "past" ? "NOT LOGGED" : "OPEN"}
         </span>
         {session && session.required === false && session.kind !== "recovery" && <span className="badge" style={{ marginLeft: 6 }}>OPTIONAL</span>}
       </div>
-      {session && <p className="small dim" style={{ marginTop: 10 }}>{session.desc}</p>}
-      {!session && <p className="small dim" style={{ marginTop: 10 }}>Nothing scheduled — rest is programmed, not a gap.</p>}
-
-      {session && session.variants && (
-        <div style={{ marginTop: 12, maxHeight: "40vh", overflowY: "auto" }}>
-          <div className="chips">
-            {[15, 25, 40, 60].map((t) => (
-              <button key={t} className={"chip" + (tier === t ? " active" : "")} onClick={() => setTier(t)}>{tierLabel(t)}</button>
-            ))}
-          </div>
-          <ExerciseList session={session} tier={tier} state={state} goCalibrate={() => { onClose(); setTab("CALIBRATION"); }} />
+      {session && <p className="small dim" style={{ marginTop: 10 }}>{day.displayDesc || session.desc}</p>}
+      {session && day.reasons && day.reasons.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          {day.reasons.map((r, i) => (<p className="reason" key={i}>{r}</p>))}
         </div>
       )}
-      {isRun && (
-        <div style={{ marginTop: 12 }}>
-          <div className="eyebrow">Prescription</div>
-          <div className="num" style={{ fontSize: 16, marginTop: 4, color: "var(--ice)" }}>{runRxFor(day.date, slot)}</div>
-          <p className="small faint" style={{ marginTop: 6 }}>{EFFORT_GUIDE}</p>
-        </div>
+      {session && day.autoOverride && day.autoOverride.reason && (
+        <p className="small" style={{ color: "var(--accent)", marginTop: 8 }}>{day.autoOverride.reason}</p>
+      )}
+      {session && <DayImpactBox day={day} plan={plan} />}
+      {!session && <p className="small dim" style={{ marginTop: 10 }}>Nothing scheduled — rest is programmed, not a gap.</p>}
+
+      {session && (
+        <WorkoutPrescriptionPreview day={day} session={session} tier={tier} state={state} setTab={setTab} onClose={onClose} />
       )}
       {isCal && (
         <div style={{ marginTop: 12 }}>
@@ -2728,16 +4067,6 @@ function SessionDetailModal({ day, state, actions, plan, today, setTab, onClose 
         {(day.status === "completed" || day.status === "partial") && (
           <button className="btn subtle sm" onClick={() => { actions.undoDay(day.date); onClose(); }}>Undo this day</button>
         )}
-        {moveTargets.length > 0 && (
-          <div style={{ width: "100%" }}>
-            <div className="small dim" style={{ margin: "6px 0" }}>Move this session to:</div>
-            <div className="chips">
-              {moveTargets.map((d) => (
-                <button key={d.date} className="chip" onClick={() => { actions.pinSession(d.date, slot); onClose(); }}>{fmtShort(d.date)}</button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </Modal>
   );
@@ -2758,10 +4087,11 @@ function MonthView({ state, today, anchor, setAnchor, onDay }) {
   const weeks = monthWeeks(anchor);
   const plans = useMemo(() => {
     const map = {};
-    weeks.forEach((ws) => {
-      const ctxToday = weekStartOf(today) === ws ? today : (ws > today ? ws : addDays(ws, 6));
-      map[ws] = planWeek({ today: ctxToday, log: state.log, pins: state.pins, dayFlags: state.dayFlags, settings: state.settings, knee: state.settings.knee, fatigue: state.fatigue });
-    });
+	    weeks.forEach((ws) => {
+	      let ctxToday = weekStartOf(today) === ws ? today : (ws > today ? ws : addDays(ws, 6));
+	      if (ws < SEP_START && addDays(ws, 6) >= SEP_START && ws > today) ctxToday = SEP_START;
+	      map[ws] = planWeek({ today: ctxToday, log: state.log, pins: state.pins, dayFlags: state.dayFlags, settings: state.settings, knee: state.settings.knee, fatigue: state.fatigue, state });
+	    });
     return map;
   }, [state, anchor, today]);
   const y = parseInt(anchor.slice(0, 4), 10), m = parseInt(anchor.slice(5, 7), 10);
@@ -2787,12 +4117,14 @@ function MonthView({ state, today, anchor, setAnchor, onDay }) {
             {plans[ws].days.map((d) => {
               const inMonth = d.date.slice(0, 7) === anchor;
               const s = d.id ? SESSIONS[d.id] : null;
+              const goals = pr5DayGoalKeys(d).slice(0, 2).map(pr5GoalLabel).join(" · ");
               return (
                 <button key={d.date}
                   className={"mcell" + (d.date === today ? " today" : "") + ((d.status === "completed" || d.status === "partial") ? " completed" : "") + (inMonth ? "" : " out")}
                   onClick={() => onDay(d, plans[ws])}>
                   <span className="mdate num">{parseInt(d.date.slice(8), 10)}</span>
-                  <span className="mname">{s ? s.short : ""}</span>
+                  <span className="mname">{d.displayShort || (s ? s.short : "")}</span>
+                  {goals && <span className="mgoal">{goals}</span>}
                   <span className="mic">{statusIcon(d.status, d.id)}</span>
                 </button>
               );
@@ -2808,6 +4140,9 @@ function WeekPlanner({ state, actions, plan, today, setTab }) {
   const [mode, setMode] = useState("week");
   const [anchor, setAnchor] = useState(today.slice(0, 7));
   const [detail, setDetail] = useState(null);
+  const plannerMessage = mode === "month"
+    ? "Month view is a forecast: each tile shows the main prescription plus the Dec 31 goal area it serves. Open a day for the dose, constraints and weekly target impact."
+    : plan.message;
   return (
     <div style={{ marginTop: 14, border: "1px solid var(--line)", borderRadius: 10, padding: "14px 14px 16px", background: "var(--panel2)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -2817,11 +4152,11 @@ function WeekPlanner({ state, actions, plan, today, setTab }) {
             <button className={mode === "week" ? "on" : ""} onClick={() => setMode("week")}>Week</button>
             <button className={mode === "month" ? "on" : ""} onClick={() => { setAnchor(today.slice(0, 7)); setMode("month"); }}>Month</button>
           </div>
-          <button className="btn sm" onClick={actions.recalc}><RefreshCw size={13} /> Recalculate</button>
+          <button className="btn sm" onClick={actions.recalc}><RefreshCw size={13} /> Refresh Forecast</button>
         </div>
       </div>
-      <p className="small dim" style={{ marginTop: 8 }}>{plan.message}</p>
-      {plan.notes.map((n, i) => (<p className="small" style={{ color: "var(--warn)", marginTop: 6 }} key={i}>{n}</p>))}
+      <p className="small dim" style={{ marginTop: 8 }}>{plannerMessage}</p>
+      {mode === "week" && plan.notes.map((n, i) => (<p className="small" style={{ color: "var(--warn)", marginTop: 6 }} key={i}>{n}</p>))}
 
       {mode === "week" && (
         <div>
@@ -2834,17 +4169,18 @@ function WeekPlanner({ state, actions, plan, today, setTab }) {
                 ((d.status === "completed" || d.status === "partial") ? " completed" : "") +
                 (s && s.required === false && s.kind !== "recovery" ? " optional" : "");
               return (
-                <button className={cls} key={d.date} onClick={() => setDetail({ day: d })}>
+                <button className={cls} key={d.date} onClick={() => setDetail({ day: d, plan })}>
                   <div className="dlab">{fmtShort(d.date).toUpperCase()}</div>
                   <div className="dname" style={{ color: d.status === "skipped" ? "var(--faint)" : "var(--text)" }}>
-                    {s ? s.short : d.status === "past" ? "—" : "Rest"}
+                    {d.displayShort || (s ? s.short : d.status === "past" ? "—" : "Rest")}
                   </div>
+                  <div className="dgoals">{pr5DayGoalKeys(d).slice(0, 2).map(pr5GoalLabel).join(" · ")}</div>
                   <div className="dstat">
                     {statusIcon(d.status, d.id)}
                     <span>
                       {d.status === "completed" ? "done" :
                        d.status === "partial" ? "partial" :
-                       d.status === "skipped" ? "moved on" :
+                       d.status === "skipped" ? "reflowed" :
                        d.status === "planned" ? (d.pinned ? "pinned" : s && s.kind === "recovery" ? "recovery" : s && s.required === false ? "optional" : "planned") :
                        d.status === "past" ? "" : "open"}
                     </span>
@@ -2862,22 +4198,22 @@ function WeekPlanner({ state, actions, plan, today, setTab }) {
         </div>
       )}
       {mode === "month" && (
-        <MonthView state={state} today={today} anchor={anchor} setAnchor={setAnchor} onDay={(d) => setDetail({ day: d })} />
+        <MonthView state={state} today={today} anchor={anchor} setAnchor={setAnchor} onDay={(d, p) => setDetail({ day: d, plan: p })} />
       )}
 
       <hr className="hr" />
       <div className="eyebrow">Training budget — {plan.calMode ? "combine block" : "how this week feeds the goals"}</div>
       <div style={{ marginTop: 8 }}>
-        {plan.calMode ? <CalProgressMini state={state} /> : <BudgetLedger done={plan.done} />}
+        {plan.calMode ? <CalProgressMini state={state} /> : <BudgetLedger done={plan.done} budgetDef={plan.budgetDef} />}
       </div>
       {!plan.calMode && (
         <p className="small faint" style={{ marginTop: 10 }}>
-          ✓min = weekly floor met · ✓ = full target. Minimums protect the block; targets grow it. Priority when compressed: A · Jam Day → one quality run → B · Drive Day → C · Ball Skills → second run → Walkthrough → Special Teams.
+          ✓min = this week's derived floor · ✓ = this week's current target. These numbers are outputs of the Dec 31 plan, not permanent rules. Log real work and the forecast recalculates.
         </p>
       )}
 
       {detail && (
-        <SessionDetailModal day={detail.day} state={state} actions={actions} plan={plan} today={today} setTab={setTab} onClose={() => setDetail(null)} />
+        <SessionDetailModal day={detail.day} state={state} actions={actions} plan={detail.plan || plan} today={today} setTab={setTab} onClose={() => setDetail(null)} />
       )}
     </div>
   );
@@ -2885,15 +4221,21 @@ function WeekPlanner({ state, actions, plan, today, setTab }) {
 
 function CalProgressMini({ state }) {
   const done = state.log.filter((e) => e.status === "completed" && SESSIONS[e.sessionId] && SESSIONS[e.sessionId].kind === "cal").map((e) => SLOT_OF[e.sessionId]);
-  const all = ["CAL_UP", "CAL_LOW", "CAL_TRACK", "CAL_ACCA", "CAL_ACCC"];
+  const coreDone = CAL_CORE_IDS.filter((id) => done.includes(id)).length;
+  const optionalDone = CAL_OPTIONAL_IDS.filter((id) => done.includes(id)).length;
   const vals = state.calibration.values;
   const wDone = Object.keys(EXERCISE_DEFAULTS).filter((id) => EXERCISE_DEFAULTS[id].cal && state.exercises[id].weight != null).length;
   const wAll = Object.keys(EXERCISE_DEFAULTS).filter((id) => EXERCISE_DEFAULTS[id].cal).length;
+  const baselineKeys = ["bodyweight", "benchBaseline", "pullupMax", "mile", "fiveK"];
+  const baselineDone = baselineKeys.filter((k) => String(vals[k] || "").trim()).length;
   return (
     <div>
-      <div className="budgetrow"><div className="lab">Combine sessions</div><Bar val={done.length} max={all.length} /><div className="cnt num">{done.length} / {all.length}</div></div>
-      <div className="budgetrow"><div className="lab">Working weights set</div><Bar val={wDone} max={wAll} /><div className="cnt num">{wDone} / {wAll}</div></div>
+      <div className="budgetrow"><div className="lab">Core baseline sessions</div><Bar val={coreDone} max={CAL_CORE_IDS.length} /><div className="cnt num">{coreDone} / {CAL_CORE_IDS.length}</div></div>
+      <div className="budgetrow"><div className="lab">Minimum goal numbers</div><Bar val={baselineDone} max={baselineKeys.length} /><div className="cnt num">{baselineDone} / {baselineKeys.length}</div></div>
+      <div className="budgetrow"><div className="lab">Working loads learned</div><Bar val={wDone} max={wAll} /><div className="cnt num">{wDone} / {wAll}</div></div>
+      <div className="budgetrow"><div className="lab">Optional load sweeps</div><Bar val={optionalDone} max={CAL_OPTIONAL_IDS.length} /><div className="cnt num">{optionalDone} / {CAL_OPTIONAL_IDS.length}</div></div>
       <div className="budgetrow"><div className="lab">Track measured</div><Bar val={vals.trackLaps ? 1 : 0} max={1} /><div className="cnt num">{vals.trackLaps ? "1 / 1" : "0 / 1"}</div></div>
+      <div className="budgetrow"><div className="lab">Vertical baseline</div><Bar val={vals.verticalJump ? 1 : 0} max={1} /><div className="cnt num">{vals.verticalJump ? "1 / 1" : "0 / 1"}</div></div>
     </div>
   );
 }
@@ -2924,26 +4266,171 @@ function ProgramTable({ slot }) {
   );
 }
 
-function ProgramView({ state, actions, setTab }) {
+function ProgramModuleCard({ moduleKey, stage }) {
+  if (moduleKey === "qualityRun" || moduleKey === "easyAerobic") {
+    const quality = moduleKey === "qualityRun";
+    const rows = quality
+      ? ["Intervals, tempo or fast-finish work when the mile/5K gap asks for it", "Usually stands alone because it creates lower-body fatigue"]
+      : ["Walkthrough: " + RUN_RX[3].EASY, "Can attach after upper lifting when time and recovery permit"];
+    return (
+      <div className="kpi" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="eyebrow" style={{ color: quality ? "var(--warn)" : "var(--accent)" }}>{quality ? "hard run" : "easy cardio"} · {quality ? "25–45" : "15–55"} min</div>
+        <div style={{ fontWeight: 800, fontSize: 14 }}>{quality ? "Quality running" : "Easy aerobic"}</div>
+        <p className="small dim">{quality ? "Mile and 5K pace development. The prescription changes with recovery, knee status and what the week still owes." : "Aerobic base, recovery support and body-composition engine. Duration flexes around the lift, not the other way around."}</p>
+        <div style={{ marginTop: "auto" }}>
+          {rows.map((r) => <p className="small faint" key={r} style={{ marginTop: 3 }}>{r}</p>)}
+        </div>
+      </div>
+    );
+  }
+  const m = PR5_MODULES[moduleKey];
+  const stim = PR5_STIMULI[moduleKey];
+  if (!m || !stim) return null;
+  const options = pr5ModuleMenu(moduleKey, stage).slice(0, 4);
+  const familyLabel = m.family === "runHard" ? "quality run" : m.family === "easy" ? "easy cardio" : m.family;
+  return (
+    <div className="kpi" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="eyebrow" style={{ color: m.hard ? "var(--warn)" : "var(--accent)" }}>{familyLabel} · {m.range || ("~" + m.minutes)} min</div>
+      <div style={{ fontWeight: 800, fontSize: 14 }}>{m.label}</div>
+      <p className="small dim">{stim.label} toward the Dec 31 outcomes. {m.hard ? "The trainer rotates dose and exercise choice around fatigue, time and recent work." : "Low-cost dose: can ride with another session or stand alone on a short day."}</p>
+      <div style={{ marginTop: "auto" }}>
+        {options.map((opt) => (
+          <p className="small faint" key={opt.id} style={{ marginTop: 3 }}>
+            <span style={{ color: "var(--ice)", fontWeight: 700 }}>{opt.label}</span> · {opt.rows.slice(0, 3).map((r) => EXERCISE_DEFAULTS[r[0]] ? EXERCISE_DEFAULTS[r[0]].name : r[0]).join(" / ")}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MixExample({ title, body, chips }) {
+  return (
+    <div className="kpi">
+      <div style={{ fontWeight: 800, fontSize: 14 }}>{title}</div>
+      <p className="small dim" style={{ marginTop: 5 }}>{body}</p>
+      <div className="chips" style={{ marginTop: 9 }}>
+        {chips.map((c) => <span className="badge" key={c}>{c}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function ProgramView({ state, actions, setTab, plan, today }) {
   const cbStage = cbStageFor(state.settings.knee, state.settings.skillStage);
   const mods = state.sessionMods || {};
+  const activeBudget = plan && plan.budgetDef ? plan.budgetDef : [];
+  const liveRows = activeBudget.filter((b) => !b.optional || Number(b.target || 0) > 0).slice(0, 8);
+  const isCombine = plan && plan.calMode;
+  const modules = ["pressStrength", "verticalPull", "horizontalPull", "lowerStrength", "verticalPower", "qualityRun", "easyAerobic", "explosivePull", "core", "arms"];
+  const combinePct = (() => {
+    const calibratedWeights = Object.values(state.exercises).filter((ex) => ex.cal && ex.weight != null).length;
+    const totalWeights = Object.values(state.exercises).filter((ex) => ex.cal).length;
+    const baselineDone = CAL_BASELINES.filter((b) => String(state.calibration.values[b.key] || "").trim()).length;
+    return Math.round(100 * (calibratedWeights + baselineDone) / Math.max(1, totalWeights + CAL_BASELINES.length));
+  })();
   return (
     <div>
       <div className="card">
-        <div className="eyebrow">The playbook · Cornerback Project V3</div>
-        <h1 className="big">Four workouts. Three runs. One skill track.</h1>
+        <div className="eyebrow">The adaptive playbook · Cornerback Project</div>
+        <h1 className="big">Modules first. Calendar second.</h1>
         <p className="small dim" style={{ marginTop: 8 }}>
-          Every session below is the complete prescription from the program — full exercise tables with rest and purpose, plus the built-in <b style={{ color: "var(--text)" }}>15 / 25 / 40 / 60-minute versions</b> so a short day still moves the block forward. The Today screen serves the right version automatically; this page is the whole playbook.
+          The old A/B/C/D labels are now exercise libraries. The trainer chooses from modules — press strength, pull-up strength, lower force, jump development, quality running, easy aerobic, core, arms and recovery — then mixes the safest useful set for the day.
         </p>
         <p className="small" style={{ marginTop: 10, color: "var(--ice)" }}>
-          Priority if you only get four real sessions in a week: <b>A · Jam Day → one quality run → B · Drive Day → C · Ball Skills.</b> Add the second quality run and the Walkthrough as schedule and recovery allow.
+          The method: derive what adaptations are needed for Dec 31, subtract what you actually banked, gate it through knee/fatigue/time, then prescribe the next useful dose. Stretching, easy cardio and small accessories can ride with lifting when they do not interfere.
         </p>
+        <div className="btnrow">
+          <button className="btn primary sm" onClick={() => setTab("TODAY")}><Zap size={13} /> See Today</button>
+          <button className="btn sm" onClick={() => setTab("ROADMAP")}><Calendar size={13} /> Forecast Calendar</button>
+        </div>
       </div>
 
       <div className="card">
-        <div className="eyebrow">Strength sessions — full tables</div>
+        <div className="eyebrow">{isCombine ? "Current combine checklist" : "This week’s derived targets"}</div>
+        <p className="small dim" style={{ marginTop: 6 }}>
+          {isCombine
+            ? "You are still before the main training block. Capture the core baselines now; accessory loads can be learned from normal workouts and chat feedback."
+            : "These are outputs, not rules. The trainer re-derives them from Dec 31 goals, real work banked, fatigue, knee status and time."} Combine is {combinePct}% learned.
+        </p>
+        <div style={{ marginTop: 8 }}>
+          {isCombine ? <CalProgressMini state={state} /> : liveRows.length ? <BudgetLedger done={plan.done} budgetDef={activeBudget} /> : <p className="small faint">Targets appear after the current week is planned.</p>}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="eyebrow">Module library</div>
+        <h2 className="sec">What the trainer can combine</h2>
+        <p className="small dim" style={{ marginTop: 6 }}>These are menus, not static workouts. The trainer picks the day’s version from time, goal pressure, soreness, exercise feedback and what has already been banked.</p>
+        <div className="grid3" style={{ marginTop: 12 }}>
+          {modules.map((key) => <ProgramModuleCard key={key} moduleKey={key} stage={cbStage} />)}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="eyebrow">Example hybrid days</div>
+        <div className="grid2" style={{ marginTop: 12 }}>
+          <MixExample title="Lift + engine" body="Bench or pull-up strength can pair with 15–25 minutes of easy aerobic when it does not create lower-body interference." chips={["press/pull", "easy aerobic", "core optional"]} />
+          <MixExample title="Lower + jump foundation" body="Early vertical work is not dunk attempts. It is ankle, calf, hip and landing capacity layered around lower force." chips={["lower force", "jump foundation", "knee gate"]} />
+          <MixExample title="Run + trunk" body="Quality running owns the day when it is hard. Low-fatigue core or mobility can attach after, but extra leg work usually waits." chips={["quality run", "core", "mobility"]} />
+          <MixExample title="15-minute minimum" body="A short day preserves the highest-value dose: press exposure, pull-ups, arms, core or mobility, depending on what moves the goal forecast most." chips={["MES", "priority only", "no junk"]} />
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="eyebrow">Run, warm-up, mobility and recovery library</div>
+        <Collapse title="September quality and easy aerobic prescriptions" defaultOpen>
+          <div className="ptable phead" style={{ gridTemplateColumns: "0.5fr 1.4fr 1.4fr 1fr" }}>
+            <div>Wk</div><div>Q1 · Routes</div><div>Q2 · 4th Quarter</div><div>Walkthrough</div>
+          </div>
+          {[1, 2, 3, 4].map((w) => (
+            <div className="ptable" style={{ gridTemplateColumns: "0.5fr 1.4fr 1.4fr 1fr" }} key={w}>
+              <div className="num" style={{ color: "var(--accent)" }}>{w}</div>
+              <div className="dim">{RUN_RX[w].QR1}</div>
+              <div className="dim">{RUN_RX[w].QR2}</div>
+              <div className="dim">{RUN_RX[w].EASY}</div>
+            </div>
+          ))}
+          <p className="small dim" style={{ marginTop: 10 }}>{EFFORT_GUIDE}</p>
+          <p className="small" style={{ marginTop: 6, color: "var(--warn)" }}>{ACCEL_ADDON}</p>
+        </Collapse>
+        {MOBILITY_BLOCKS.map((m) => <Collapse title={m.title} key={m.id}><p className="small dim">{m.body}</p></Collapse>)}
+      </div>
+
+      <div className="card">
+        <div className="eyebrow">Impact progression · vertical, speed and knee</div>
+        <div className="grid2" style={{ marginTop: 8 }}>
+          <div>
+            <h2 className="sec">Coverage Skills stage</h2>
+            <p className="small dim">Current stage: <b style={{ color: "var(--accent)" }}>Stage {cbStage}</b>{cbStage !== state.settings.skillStage ? " (capped by knee status)" : ""}. Advance only when the current stage is boring and the knee stays quiet.</p>
+            <div className="chips" style={{ marginTop: 10 }}>
+              {[1, 2, 3, 4].map((n) => (
+                <button key={n} className={"chip" + (state.settings.skillStage === n ? " active" : "")} onClick={() => actions.setSkillStage(n)}>Stage {n}</button>
+              ))}
+            </div>
+            {CB_SKILL.map((s) => (
+              <p className="small dim" key={s.stage} style={{ marginTop: 8, opacity: s.stage <= cbStage ? 1 : 0.55 }}>
+                <span className="num" style={{ color: s.stage <= cbStage ? "var(--good)" : "var(--faint)", fontWeight: 700 }}>S{s.stage}</span> <b>{s.name}</b> · {s.drills.slice(0, 2).join(" · ")}
+              </p>
+            ))}
+          </div>
+          <div>
+            <h2 className="sec">Knee ladder</h2>
+            {KNEE_LADDER.map((k) => (
+              <p key={k.stage} className="small dim" style={{ marginTop: 8 }}>
+                <span className="num" style={{ color: "var(--accent)", fontWeight: 700 }}>S{k.stage}</span> <b>{k.name}</b> · {k.moves}
+              </p>
+            ))}
+            <p className="small" style={{ color: "var(--warn)", marginTop: 12 }}>No heavy back squats, maximal jumps or hard cutting are required for the September version. Pain regresses the module.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="eyebrow">Anchor exercise libraries</div>
+        <p className="small dim" style={{ marginTop: 6 }}>These tables are still useful. They are the raw ingredients the planner pulls from, not promises that every week contains each named session.</p>
         <div style={{ marginTop: 6 }}>
-          <Collapse title={SESSIONS.A.name} defaultOpen>
+          <Collapse title={SESSIONS.A.name}>
             <ProgramTable slot="A" />
             {mods.A && mods.A.add && mods.A.add.length > 0 && (
               <p className="small" style={{ marginTop: 8, color: "var(--good)" }}>Your adds: {mods.A.add.map((a) => (state.exercises[a.id] ? state.exercises[a.id].name : a.id) + " (" + a.sr + ")").join(", ")}</p>
@@ -2953,83 +4440,7 @@ function ProgramView({ state, actions, setTab }) {
           <Collapse title={SESSIONS.C.name}><ProgramTable slot="C" /></Collapse>
           <Collapse title={SESSIONS.D.name}><ProgramTable slot="D" /></Collapse>
         </div>
-        <p className="small faint" style={{ marginTop: 10 }}>Want something in or out — say, more incline work? Tell the Coach: "add incline bench 3×8 to Jam Day." It lands in the 60/40-minute versions and never bloats the 15-minute minimum.</p>
-      </div>
-
-      <div className="card">
-        <div className="eyebrow">Running — September prescriptions</div>
-        <div className="ptable phead" style={{ gridTemplateColumns: "0.5fr 1.4fr 1.4fr 1fr" }}>
-          <div>Wk</div><div>Q1 · Routes</div><div>Q2 · 4th Quarter</div><div>Walkthrough</div>
-        </div>
-        {[1, 2, 3, 4].map((w) => (
-          <div className="ptable" style={{ gridTemplateColumns: "0.5fr 1.4fr 1.4fr 1fr" }} key={w}>
-            <div className="num" style={{ color: "var(--accent)" }}>{w}</div>
-            <div className="dim">{RUN_RX[w].QR1}</div>
-            <div className="dim">{RUN_RX[w].QR2}</div>
-            <div className="dim">{RUN_RX[w].EASY}</div>
-          </div>
-        ))}
-        <p className="small dim" style={{ marginTop: 10 }}>{EFFORT_GUIDE}</p>
-        <p className="small" style={{ marginTop: 6, color: "var(--warn)" }}>{ACCEL_ADDON}</p>
-        <p className="small faint" style={{ marginTop: 6 }}>The mezzanine track is roughly 12–14 laps per mile, so September stays time/effort-based on purpose. Measure the straight during the Combine and October gets more precise.</p>
-      </div>
-
-      <div className="card">
-        <div className="eyebrow">Coverage Skills — the cornerback track</div>
-        <p className="small dim" style={{ marginTop: 6 }}>
-          8–10 minutes attached to Jam Day, Drive Day and Route Speed. This is where backpedal, hip turns, mirror work, acceleration and change-of-direction live — earned stage by stage, exactly like the program's knee ladder. Your current stage: <b style={{ color: "var(--accent)" }}>Stage {cbStage}</b>{cbStage !== state.settings.skillStage ? " (capped by knee status)" : ""}.
-        </p>
-        {CB_SKILL.map((s) => (
-          <div key={s.stage} style={{ padding: "10px 0", borderBottom: s.stage < 4 ? "1px solid var(--line)" : "none", opacity: s.stage <= cbStage ? 1 : 0.55 }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-              <span className="num" style={{ color: s.stage <= cbStage ? "var(--good)" : "var(--faint)", fontWeight: 700 }}>S{s.stage}</span>
-              <b style={{ fontSize: 13.5 }}>{s.name}</b>
-              <span className="small faint">{s.pace}</span>
-              {s.stage === cbStage && <span className="badge" style={{ color: "var(--accent)", borderColor: "var(--accent2)" }}>YOU ARE HERE</span>}
-            </div>
-            <p className="small dim" style={{ marginTop: 4 }}>{s.drills.join(" · ")}</p>
-            <p className="small faint" style={{ marginTop: 3 }}>{s.note}</p>
-          </div>
-        ))}
-        <div className="btnrow">
-          <div className="chips">
-            {[1, 2, 3, 4].map((n) => (
-              <button key={n} className={"chip" + (state.settings.skillStage === n ? " active" : "")} onClick={() => actions.setSkillStage(n)}>Stage {n}</button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="eyebrow">Lower-body progression ladder — knee-conscious</div>
-        {KNEE_LADDER.map((k) => (
-          <div key={k.stage} style={{ padding: "10px 0", borderBottom: k.stage < 4 ? "1px solid var(--line)" : "none" }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-              <span className="num" style={{ color: "var(--accent)", fontWeight: 700 }}>S{k.stage}</span>
-              <b style={{ fontSize: 13.5 }}>{k.name}</b>
-              <span className="small faint">{k.when}</span>
-            </div>
-            <p className="small dim" style={{ marginTop: 3 }}>{k.moves}</p>
-          </div>
-        ))}
-        <p className="small" style={{ color: "var(--warn)", marginTop: 12 }}>
-          No exercise earns a place merely because it is "athletic." Meaningful pain, swelling, instability or altered mechanics → stop or regress. September requires no heavy back squats, maximal jumps or hard cutting.
-        </p>
-      </div>
-
-      <div className="card">
-        <div className="eyebrow">September recommended flow — a map, not a rulebook</div>
-        {FLOW.map((f, i) => (
-          <div className="ptable" style={{ gridTemplateColumns: "0.7fr 2fr 1.3fr" }} key={i}>
-            <div className="num" style={{ color: "var(--ice)" }}>{f[0]}</div>
-            <div style={{ fontWeight: 650 }}>{f[1]}</div>
-            <div className="dim">{f[2]}</div>
-          </div>
-        ))}
-        <p className="small faint" style={{ marginTop: 10 }}>If work removes a day, the engine uses the weekly budget and the priority order instead of blindly shifting every workout. That's the whole point.</p>
-        <div className="btnrow">
-          <button className="btn sm" onClick={() => setTab("ROADMAP")}><Calendar size={13} /> See it on the Roadmap</button>
-        </div>
+        <p className="small faint" style={{ marginTop: 10 }}>Want something in or out? Tell the Trainer: "add incline bench 3x8 to upper anchor" or "lateral raises irritate my shoulder." It becomes memory or a library edit instead of silently bloating every short day.</p>
       </div>
     </div>
   );
@@ -3051,6 +4462,7 @@ function GoalRow({ g, snap, ov }) {
   if (g.key === "mu") { cur = snap.mu ? "Done" : "Not yet"; pct = snap.mu ? 100 : 0; }
   if (g.key === "bw") { cur = snap.lastBw + " lb"; pct = pctToward(snap.lastBw, g.startVal, tBand); }
   if (g.key === "abs" || g.key === "speed") { cur = "tracked at review"; pct = 0; }
+  if (g.key === "vertical") { cur = snap.vertical || "baseline pending"; pct = 0; }
   return (
     <div className="goalrow">
       <div style={{ fontWeight: 700, fontSize: 13.5 }}>{g.label}</div>
@@ -3082,8 +4494,16 @@ function RoadmapView({ state, actions, plan, today, setTab }) {
       <div className="card">
         <div className="eyebrow">Training calendar · week and month</div>
         <h2 className="sec">Your schedule</h2>
-        <p className="small dim" style={{ marginTop: 6 }}>See the individual workouts, open any day for its full prescription, and recalculate when the week changes.</p>
+        <p className="small dim" style={{ marginTop: 6 }}>See the individual workouts, open any day for its full prescription, and let logged feedback change the next forecast. Tiles now show the goal area they serve, not just the workout label.</p>
+        <RoadmapForecastPanel plan={plan} />
         <WeekPlanner state={state} actions={actions} plan={plan} today={today} setTab={setTab} />
+      </div>
+
+      <div className="card">
+        <div className="eyebrow">Constraint playbook</div>
+        <h2 className="sec">Short days still point somewhere.</h2>
+        <p className="small dim" style={{ marginTop: 6 }}>A travel day or tiny time window changes the dose and equipment, not the north star. Micro work helps one target and leaves the rest of the gap visible.</p>
+        <ConstraintPlaybook />
       </div>
 
       <div className="card">
@@ -3096,7 +4516,7 @@ function RoadmapView({ state, actions, plan, today, setTab }) {
             <span className="small faint">Aug 19 – 30</span>
             {blockKey === "aug" && <span className="badge" style={{ color: "var(--accent)", borderColor: "var(--accent2)" }}>NOW</span>}
           </div>
-          <p className="small dim" style={{ marginTop: 6 }}><b style={{ color: "var(--ice)" }}>Mission · </b>Capture every baseline fresh — bench, pull-ups, explosive pull height, track laps — and calibrate all working weights so September runs on data, not guesses.</p>
+          <p className="small dim" style={{ marginTop: 6 }}><b style={{ color: "var(--ice)" }}>Mission · </b>Capture the core baselines fresh — upper, lower, track/easy run — then let normal workouts learn the accessory loads without delaying September.</p>
         </div>
 
         {ROADMAP.map((m) => (
@@ -3194,6 +4614,8 @@ function PerformanceView({ state, actions, plan, today }) {
         </div>
       </div>
 
+      <WeeklyCheckinCard state={state} actions={actions} today={today} />
+
       <div className="grid2">
         <div className="card">
           <div className="eyebrow"><TrendingUp size={11} style={{ verticalAlign: "-1px" }} /> Bench working weight</div>
@@ -3251,7 +4673,7 @@ function PerformanceView({ state, actions, plan, today }) {
                 <span className="num small faint" style={{ width: 74 }}>{fmtShort(e.date)}</span>
                 <span style={{ fontSize: 13, fontWeight: 650 }}>{SESSIONS[e.sessionId] ? SESSIONS[e.sessionId].short : e.sessionId}</span>
                 <span className="small" style={{ marginLeft: "auto", color: e.status === "completed" ? "var(--good)" : e.status === "partial" ? "var(--warn)" : "var(--faint)" }}>
-                  {e.status === "completed" ? "✓ " + (e.feel || "done") : e.status === "partial" ? "partial" + (e.feel ? " · " + e.feel : "") : "moved on"}
+                  {e.status === "completed" ? "✓ " + (e.feel || "done") : e.status === "partial" ? "partial" + (e.feel ? " · " + e.feel : "") : "reflowed"}
                 </span>
               </div>
             ))}
@@ -3298,17 +4720,17 @@ function CalibrationView({ state, actions }) {
     <div>
       <div className="card">
         <div className="eyebrow">Aug 19 – 30 · combine + calibration</div>
-        <h1 className="big">Baselines first. Then the block.</h1>
+        <h1 className="big">Enough baseline. Then train.</h1>
         <p className="small dim" style={{ marginTop: 8 }}>
-          Nothing in September runs on guessed weights. Establish the data without exhausting yourself — these values auto-populate every September workout, and you can override any of them here at any time.
+          The trainer needs a few anchor numbers, not a perfect lab day. Core baselines get scheduled now; accessory loads can be learned during normal workouts when you report what felt easy, hard, painful or skipped.
         </p>
         <div className="card tight" style={{ marginTop: 14, borderColor: "var(--accent2)", background: "var(--panel2)" }}>
           <div className="eyebrow" style={{ color: "var(--accent)" }}>Calibration rule</div>
           <p className="small" style={{ marginTop: 6 }}>{CAL_RULE}</p>
         </div>
         <div style={{ marginTop: 14 }}>
-          <div className="eyebrow">Combine sessions</div>
-          {["CAL_UP", "CAL_LOW", "CAL_TRACK", "CAL_ACCA", "CAL_ACCC"].map((id) => (
+          <div className="eyebrow">Core baseline sessions</div>
+          {CAL_CORE_IDS.map((id) => (
             <div key={id} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: "1px solid var(--line)", alignItems: "baseline" }}>
               {calDoneSlots.has(id) ? <Check size={14} color="var(--good)" style={{ flexShrink: 0, position: "relative", top: 2 }} /> : <span className="num faint" style={{ width: 14 }}>·</span>}
               <div>
@@ -3317,7 +4739,20 @@ function CalibrationView({ state, actions }) {
               </div>
             </div>
           ))}
-          <p className="small faint" style={{ marginTop: 8 }}>The Today screen schedules these across the window. Complete them from Today; enter the numbers here.</p>
+          <p className="small faint" style={{ marginTop: 8 }}>The Today screen schedules these across the window. Finish these and the September roadmap has enough signal to start.</p>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <div className="eyebrow">Optional load sweeps</div>
+          {CAL_OPTIONAL_IDS.map((id) => (
+            <div key={id} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: "1px solid var(--line)", alignItems: "baseline" }}>
+              {calDoneSlots.has(id) ? <Check size={14} color="var(--good)" style={{ flexShrink: 0, position: "relative", top: 2 }} /> : <span className="num faint" style={{ width: 14 }}>·</span>}
+              <div>
+                <b style={{ fontSize: 13.5 }}>{SESSIONS[id].name}</b>
+                <p className="small dim" style={{ marginTop: 2 }}>{SESSIONS[id].desc}</p>
+              </div>
+            </div>
+          ))}
+          <p className="small faint" style={{ marginTop: 8 }}>Useful when you have time, not mandatory. The same loads can be learned later from workout logs and Trainer chat.</p>
         </div>
       </div>
 
@@ -3483,13 +4918,13 @@ function SettingsView({ state, actions }) {
       <div className="card">
         <div className="eyebrow"><MessageCircle size={11} style={{ verticalAlign: "-1px" }} /> Trainer Brain</div>
         <p className="small dim" style={{ marginTop: 6 }}>
-          Coach is always available. Message it before, during, or after training — or days later — and useful information is converted into structured athlete events, current state, and durable trainer memory. The model key lives only on the server; never paste an API key into this browser.
+          Chat is the primary input. Messages become structured events, current state, and durable trainer memory. The model itself does not learn; the app saves the useful facts and includes them in the next trainer context.
         </p>
         <div className="field" style={{ marginTop: 12 }}>
           <label>Trainer endpoint</label>
           <input className="input" placeholder="/api/trainer" value={state.settings.coachEndpoint || "/api/trainer"} onChange={(e) => actions.setCoachEndpoint(e.target.value)} />
         </div>
-        <p className="small faint" style={{ marginTop: 6 }}>Default: /api/trainer. On deployment, set OPENAI_API_KEY as a server environment variable. Conversation history remains part of app state; PR3 will move athlete memory to a cloud database for cross-device sync.</p>
+        <p className="small faint" style={{ marginTop: 6 }}>Default: /api/trainer. Until that endpoint exists, common messages are handled by a local extractor and stored in this browser. Production should use Postgres tables plus a compact trainer profile summary.</p>
         <div className="btnrow">
           <button className="btn subtle sm" onClick={actions.clearChat}>Clear chat history</button>
         </div>
@@ -3570,23 +5005,6 @@ function SettingsView({ state, actions }) {
   );
 }
 
-/* --------------------------------- APP ----------------------------------- */
-
-function HelpCard({ state, actions }) {
-  if (state.ui.helpDismissed) return null;
-  return (
-    <div className="card tight" style={{ borderColor: "var(--accent2)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-        <div className="eyebrow" style={{ color: "var(--accent)" }}>How this works — 20 seconds</div>
-        <button className="btn subtle sm" onClick={actions.dismissHelp}><X size={13} /></button>
-      </div>
-      <p className="small" style={{ marginTop: 8 }}><span className="helpnum">1</span>You're not chasing a calendar. Each week has a <b>budget</b> (2 upper, 2 runs, 1 lower…). Miss a day and the week reflows — nothing is "lost".</p>
-      <p className="small" style={{ marginTop: 6 }}><span className="helpnum">2</span>The buttons do the thinking. <b>Skip</b>, <b>Move</b>, <b>I'm Exhausted</b>, <b>Knee</b> — press one and the schedule rebuilds safely around it.</p>
-      <p className="small" style={{ marginTop: 6 }}><span className="helpnum">3</span>The named workouts are anchors, not a split. The trainer can mix compatible modules — pull-ups + easy aerobic, arms on an easy day, or a condensed lift + light run — when that is the best way to close your weekly gaps. Tell the <b>Coach</b>: "done", "I only did 15 minutes", "that was too easy", or "rebuild the week".</p>
-    </div>
-  );
-}
-
 /* ------------------------------ Coach chat ------------------------------- */
 
 async function claudeCall(sys, msgs) {
@@ -3616,7 +5034,7 @@ async function coachTurn(state, plan, today, userText) {
   const r = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system: sys, messages: msgs }),
+    body: JSON.stringify({ system: sys, messages: msgs, today, athleteKey: "local-demo" }),
   });
   if (!r.ok) {
     let detail = "trainer " + r.status;
@@ -3624,6 +5042,7 @@ async function coachTurn(state, plan, today, userText) {
     throw new Error(detail);
   }
   const d = await r.json();
+  if (d && d.configured === false) throw new Error("trainer endpoint is not configured yet");
   const text = Array.isArray(d.content)
     ? d.content.map((b) => (b.type === "text" ? b.text : "")).filter(Boolean).join("\n")
     : (typeof d.text === "string" ? d.text : "");
@@ -3658,10 +5077,12 @@ function runCoachActions(list, ctx) {
         if (d && (d.status === "completed" || d.status === "partial")) out.push("• " + fmtShort(date) + " was already logged");
         else if (d && d.id) {
           const ss = SESSIONS[d.id];
-          const tier = snapTier(state.settings.weekdayMinutes[dowMon0(date)] == null ? 60 : state.settings.weekdayMinutes[dowMon0(date)]);
-          const fullList = effectiveList(ss, tier, state.sessionMods, (state.dayWorkoutOverrides || {})[date]);
-          const doneIds = fullList ? fullList.map((r) => r[0]) : null;
-          actions.completeSession(date, d.id, { feel: a.feel || null, duration: tier, exercisesCompleted: doneIds, exercisesSkipped: [] });
+          const current = pr5EffectiveWorkoutForDay(state, d);
+          const doneIds = current && current.rows.length ? current.rows.map((r) => r[0]) : null;
+          const actualDuration = current ? current.minutes : pr5AvailabilityForDate(state.settings, state, date);
+          const payload = { feel: a.feel || null, duration: actualDuration, exercisesCompleted: doneIds, exercisesSkipped: [] };
+          if (ss && ss.kind === "run") payload.completionFraction = actualDuration < 15 ? .5 : 1;
+          actions.completeSession(date, d.id, payload);
           out.push("✓ " + SESSIONS[d.id].short + " logged complete · " + fmtShort(date));
         }
         else out.push("• nothing planned on " + fmtShort(date));
@@ -3683,13 +5104,69 @@ function runCoachActions(list, ctx) {
       } else if (a.type === "set_fatigue") {
         if (a.area && a.level != null) { actions.setFatigueArea(String(a.area), a.level, date, a.note || ""); out.push("✓ fatigue " + a.area + " updated"); }
       } else if (a.type === "exercise_feedback") {
-        const hit = findExerciseByName(state.exercises, a.name); if (hit && ["too_easy","appropriate","too_hard"].includes(a.difficulty)) { actions.recordExerciseFeedback(hit[0], a.difficulty, date, a.observed_rir, a.note); out.push("✓ " + hit[1].name + " feedback saved"); } else out.push("• couldn't apply exercise feedback");
+        const hit = findExerciseByName(state.exercises, a.name);
+        if (hit && ["too_easy","appropriate","too_hard"].includes(a.difficulty)) {
+          const observedWeight = a.actual_weight != null ? a.actual_weight : a.weight;
+          const prog = pr5ExerciseProgressionFromFeedback(hit[0], hit[1], a.difficulty, observedWeight);
+          actions.recordExerciseFeedback(hit[0], a.difficulty, date, a.observed_rir, a.note, observedWeight);
+          out.push("✓ " + hit[1].name + " feedback saved" + (prog.changed && prog.nextWeight != null ? "; next load " + prog.nextWeight + " " + hit[1].unit : ""));
+        } else out.push("• couldn't apply exercise feedback");
       } else if (a.type === "modify_today_session") {
         const rem = (Array.isArray(a.remove_exercises) ? a.remove_exercises : []).map((x) => { if (state.exercises[x]) return x; const hit = findExerciseByName(state.exercises, x); return hit ? hit[0] : null; }).filter(Boolean);
         const adds = (Array.isArray(a.add_exercises) ? a.add_exercises : []).map((x) => { const hit = findExerciseByName(state.exercises, typeof x === "string" ? x : x.name); return hit ? { id: hit[0], sr: (typeof x === "object" && x.sets_reps) || "2 × 8–12", note: "coach substitution" } : null; }).filter(Boolean);
         actions.setDayWorkoutOverride(date, { remove: rem, add: adds, reason: a.reason || "Coach adjusted today's remainder." }); out.push("✓ today's remaining workout adjusted");
+      } else if (a.type === "defer_exercises") {
+        const from = a.from_date && /^\d{4}-\d{2}-\d{2}$/.test(a.from_date) ? a.from_date : date;
+        const to = a.to_date && /^\d{4}-\d{2}-\d{2}$/.test(a.to_date) ? a.to_date : addDays(from, 1);
+        const raw = Array.isArray(a.exercises) ? a.exercises : String(a.exercises || "").split(/,|\+/);
+        const ids = Array.from(new Set(raw.map((x) => {
+          const key = String(x || "").trim();
+          if (state.exercises[key]) return key;
+          const hit = findExerciseByName(state.exercises, key);
+          return hit ? hit[0] : null;
+        }).filter(Boolean)));
+        if (!ids.length) { out.push("• couldn't find the exercise to move"); }
+        else {
+          const fromDay = dayOf(from);
+          const fromCurrent = fromDay ? pr5EffectiveWorkoutForDay(state, fromDay) : null;
+          const sourceRows = (fromCurrent && fromCurrent.rows) || [];
+          const addRows = ids.map((id) => {
+            const src = sourceRows.find((r) => r[0] === id);
+            if (!state.exercises[id]) return null;
+            return {
+              id,
+              sr: src ? src[1] : "deferred dose",
+              note: (src && src[2] ? src[2] + " · " : "") + "deferred from " + fmtShort(from),
+            };
+          }).filter(Boolean);
+          const names = ids.map((id) => state.exercises[id] ? state.exercises[id].name : id);
+          actions.setDayWorkoutOverride(from, { remove: ids, userRemove: ids, reason: a.reason || "Coach deferred " + names.join(", ") + "." });
+          actions.setDayWorkoutOverride(to, { add: addRows, reason: "Deferred from " + fmtShort(from) + ": " + names.join(", ") + "." });
+          actions.logAthleteEvent(from, { event_type: "deferred_exercise", occurred_at: from, text: a.reason || "", data: { fromDate: from, toDate: to, exercises: ids } });
+          out.push("✓ " + names.join(", ") + " moved from " + fmtShort(from) + " to " + fmtShort(to));
+        }
+      } else if (a.type === "extend_today_session") {
+        const patch = pr5LiveExtensionPatch(state, plan, date, a.minutes);
+        if (patch) {
+          actions.setDayWorkoutOverride(date, patch);
+          const names = (patch.add || []).map((x) => (state.exercises[x.id] ? state.exercises[x.id].name : x.id)).join(", ");
+          out.push("✓ extra-time add-on added" + (names ? ": " + names : ""));
+        } else out.push("• no safe add-on found; finish strong and stop there");
+      } else if (a.type === "shorten_today_session") {
+        const patch = pr5LiveShortenPatch(state, plan, date, a.minutes);
+        if (patch) {
+          actions.setDayWorkoutOverride(date, patch);
+          const names = (patch.remove || []).map((id) => (state.exercises[id] ? state.exercises[id].name : id)).join(", ");
+          out.push("✓ today's session cut down" + (names ? "; removed " + names : ""));
+        } else out.push("• nothing planned to cut down today");
       } else if (a.type === "set_today_time") {
-        const mins = Number(a.minutes); if (Number.isFinite(mins) && mins > 0) { actions.setDayWorkoutOverride(date, { tier: snapTier(mins), reason: "Time changed to " + mins + " min." }); out.push("✓ today's session compressed to " + snapTier(mins) + "-minute tier"); }
+        const mins = Number(a.minutes); if (Number.isFinite(mins) && mins > 0) { actions.setDayWorkoutOverride(date, { availableMinutes: mins, tier: snapTier(mins), reason: "Time changed to " + mins + " min." }); out.push("✓ today's available time → " + mins + " min"); }
+      } else if (a.type === "set_day_time") {
+        const mins = Number(a.minutes); if (Number.isFinite(mins) && mins > 0) { actions.setDayWorkoutOverride(date, { availableMinutes: mins, tier: snapTier(mins), reason: "One-off time window: " + mins + " min." }); out.push("✓ " + fmtShort(date) + " available time → " + mins + " min"); }
+      } else if (a.type === "set_day_constraints") {
+        const constraints = { travel: !!a.travel, noGym: !!(a.no_gym || a.noGym), noEquipment: !!(a.no_equipment || a.noEquipment) };
+        actions.setDayWorkoutOverride(date, { constraints, reason: a.note || "One-off constraint saved." });
+        out.push("✓ " + fmtShort(date) + " constraints saved");
       } else if (a.type === "recalc_week") {
         actions.recalc(); out.push("✓ week recalculated");
       } else if (a.type === "move_session") {
@@ -3787,25 +5264,27 @@ function CoachDrawer({ open, onClose, state, actions, plan, today }) {
       const acts = runCoachActions(res.actions, { state, actions, plan, today });
       actions.pushChat({ role: "assistant", text: res.reply || (acts.length ? "Done." : "Tell me more."), acts });
     } catch (e) {
-      actions.pushChat({ role: "assistant", text: "Couldn't reach the coach service just now — nothing was logged. Try again in a moment.", acts: [] });
+      const res = localCoachTurn(state, plan, today, t);
+      const acts = runCoachActions(res.actions, { state, actions, plan, today });
+      actions.pushChat({ role: "assistant", text: res.reply || "Saved locally.", acts });
     }
     setBusy(false);
   };
-  const quick = ["How am I doing?", "159.2 this morning", "Slept badly last night", "My knee started hurting later", "I can't train tomorrow", "Had chicken, rice + a shake"];
+  const quick = ["159.2 this morning", "Slept badly last night", "My knee started hurting later", "Only did bench + pull-ups — 15 minutes", "Can't do pull-ups today, make it tomorrow", "Had chicken, rice + a shake"];
   return (
     <div className="drawer">
       <div className="drawer-head">
         <MessageCircle size={16} color="var(--accent)" />
         <div>
-          <div style={{ fontWeight: 750, fontSize: 14 }}>Coach</div>
-          <div className="small faint">{state.settings.coachEndpoint ? "Trainer endpoint connected" : "Local demo coach until server endpoint is connected"}</div>
+          <div style={{ fontWeight: 750, fontSize: 14 }}>Trainer</div>
+          <div className="small faint">{state.settings.coachEndpoint ? "Cloud endpoint when available · local memory fallback always on" : "Local memory fallback"}</div>
         </div>
         <button className="btn subtle sm" style={{ marginLeft: "auto" }} onClick={onClose}><X size={14} /></button>
       </div>
       <div className="drawer-msgs" ref={scrollRef}>
         {state.chat.length === 0 && (
           <div className="bub coach">
-            Message me whenever you want — morning, afternoon, before or after training, on a rest day, or days later:{"\n"}· "only did bench + pull-ups — 15 minutes"{"\n"}· "that was brutal; hamstrings are cooked, adjust my week"{"\n"}· "30 lb curls were way too easy"{"\n"}· "RDL hurt, remove it from the rest of today"{"\n"}· "ate chicken, rice + a shake"{"\n"}· "drank 24 oz"{"\n"}· "159.2 this morning; waist 31.5; felt strong this week"
+            Text me like a trainer. I extract what matters, save it as structured memory, and the next forecast reads it back:{"\n"}· "only did bench + pull-ups — 15 minutes"{"\n"}· "that was brutal; hamstrings are cooked, adjust my week"{"\n"}· "30 lb curls were way too easy"{"\n"}· "RDL hurt, remove it from the rest of today"{"\n"}· "ate chicken, rice + a shake"{"\n"}· "drank 24 oz"{"\n"}· "159.2 this morning; waist 31.5; felt strong this week"
           </div>
         )}
         {state.chat.map((m, i) => (
@@ -3837,21 +5316,20 @@ function OnboardingWizard({ actions }) {
   const [step, setStep] = useState(0);
   const [bw, setBw] = useState("");
   const [bench, setBench] = useState("");
-  const [mins, setMins] = useState({ 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 75, 6: 60 });
   const [remOn, setRemOn] = useState(true);
   const [remTime, setRemTime] = useState("07:00");
   const [health, setHealth] = useState(false);
   const askNotif = () => { try { if (typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission(); } catch (e) {} };
-  const finish = () => actions.completeOnboarding({ date: ymd(new Date()), bw: bw.trim(), bench: bench.trim(), minutes: mins, reminderOn: remOn, reminderTime: remTime, health });
+  const finish = () => actions.completeOnboarding({ date: ymd(new Date()), bw: bw.trim(), bench: bench.trim(), reminderOn: remOn, reminderTime: remTime, health });
   const steps = [
     (
       <div key="s0">
         <div className="eyebrow" style={{ color: "var(--accent)" }}>Welcome to the block</div>
         <h1 className="big">Cornerback Project</h1>
-        <p className="small dim" style={{ marginTop: 10 }}>Four months: sub-20 5K, 5:30 mile, a 225 bench attempt, 20+ pull-ups, a muscle-up — on a knee that gets respected. Three things make this app different:</p>
-        <p className="small" style={{ marginTop: 12 }}><span className="helpnum">1</span><b>Budget, not calendar.</b> Each week has targets (2 upper, 2 quality runs, 1 lower…). Life moves a workout? The week reflows. No streaks, no guilt.</p>
-        <p className="small" style={{ marginTop: 8 }}><span className="helpnum">2</span><b>Buttons that think.</b> Skip · Move · I'm Exhausted · Knee — one tap rebuilds the schedule around hard recovery rules.</p>
-        <p className="small" style={{ marginTop: 8 }}><span className="helpnum">3</span><b>A coach you can text.</b> "Benched 175", "skip today, recalc" — the chat bubble logs it all.</p>
+        <p className="small dim" style={{ marginTop: 10 }}>Four months: sub-20 5K, 5:30 mile, a 225 bench attempt, 20+ pull-ups, a muscle-up — on a knee that gets respected. The trainer gets better because the app remembers useful data.</p>
+        <p className="small" style={{ marginTop: 12 }}><span className="helpnum">1</span><b>Text the trainer.</b> Say what you did, skipped, ate, slept, hurt, or crushed. The app extracts structured signals.</p>
+        <p className="small" style={{ marginTop: 8 }}><span className="helpnum">2</span><b>Memory lives in storage.</b> The model does not change; your saved profile and recent history are fed back into future recommendations.</p>
+        <p className="small" style={{ marginTop: 8 }}><span className="helpnum">3</span><b>Today stays simple.</b> Start or log the workout from the daily card; changes like travel, pain, missed work, or extra time go through the trainer chat.</p>
       </div>
     ),
     (
@@ -3867,22 +5345,7 @@ function OnboardingWizard({ actions }) {
     ),
     (
       <div key="s2">
-        <div className="eyebrow" style={{ color: "var(--accent)" }}>Step 3 · Your real week</div>
-        <h2 className="sec" style={{ marginTop: 6, fontSize: 20 }}>Minutes you can usually train</h2>
-        <p className="small dim" style={{ marginTop: 6 }}>The schedule fits itself to this — and a 15-minute day still counts as a real session. Change it anytime in Settings.</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginTop: 14 }}>
-          {DOW_SHORT.map((d, i) => (
-            <div className="field" key={d}>
-              <label>{d}</label>
-              <input className="input" value={mins[i]} onChange={(e) => setMins({ ...mins, [i]: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
-    (
-      <div key="s3">
-        <div className="eyebrow" style={{ color: "var(--accent)" }}>Step 4 · Connect</div>
+        <div className="eyebrow" style={{ color: "var(--accent)" }}>Step 3 · Connect</div>
         <h2 className="sec" style={{ marginTop: 6, fontSize: 20 }}>Health data & reminders</h2>
         <div className="card tight" style={{ marginTop: 12 }}>
           <b style={{ fontSize: 13.5 }}>Apple Watch / Apple Health</b>
@@ -3897,7 +5360,7 @@ function OnboardingWizard({ actions }) {
             <input className="input" style={{ width: 100 }} value={remTime} onChange={(e) => setRemTime(e.target.value)} />
           </div>
         </div>
-        <p className="small faint" style={{ marginTop: 12 }}>The AI Coach is already live — no key, no setup. Bottom-right bubble.</p>
+        <p className="small faint" style={{ marginTop: 12 }}>The trainer chat can save common feedback locally now; connect /api/trainer later for full AI reasoning. Bottom-right bubble.</p>
       </div>
     ),
   ];
@@ -3948,6 +5411,7 @@ export default function CornerbackApp() {
       settings: state.settings,
       knee: state.settings.knee,
       fatigue: state.fatigue,
+      state,
     });
   }, [state, today]);
 
@@ -4018,7 +5482,7 @@ export default function CornerbackApp() {
           </div>
         )}
         {tab === "TODAY" && <TodayView state={state} actions={actions} plan={plan} today={today} setTab={setTab} />}
-        {tab === "PROGRAM" && <ProgramView state={state} actions={actions} setTab={setTab} />}
+        {tab === "PROGRAM" && <ProgramView state={state} actions={actions} setTab={setTab} plan={plan} today={today} />}
         {tab === "ROADMAP" && <RoadmapView state={state} actions={actions} plan={plan} today={today} setTab={setTab} />}
         {tab === "PERFORMANCE" && <PerformanceView state={state} actions={actions} plan={plan} today={today} />}
         {tab === "CALIBRATION" && <CalibrationView state={state} actions={actions} />}

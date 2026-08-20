@@ -11,6 +11,8 @@ npm run dev
 
 Then open the local URL Vite prints in the terminal.
 
+`npm run dev` starts the Node/Vite server so `/api/trainer` works locally. Plain `npm run dev:vite` is still available for UI-only work.
+
 ## Build
 
 ```bash
@@ -44,7 +46,17 @@ It does **not** combine hard run + hard lower work or ignore recent muscle fatig
 
 ## Data
 
-Progress is stored locally in the browser. Export JSON from Settings before clearing browser storage or moving machines.
+Progress is stored locally in the browser as an offline fallback. When `DATABASE_URL` is set, `/api/trainer` also saves structured trainer turns to Postgres: chat actions, durable facts, body metrics, recovery, food/water, workout sessions, exercise feedback, and day-level planner overrides.
+
+Server setup:
+
+```bash
+cp .env.example .env
+npm run migrate
+npm run dev
+```
+
+Use Neon for `DATABASE_URL` and keep both `DATABASE_URL` and `OPENAI_API_KEY` in `.env` locally or Replit Secrets in Replit.
 
 ## Apple Health
 
