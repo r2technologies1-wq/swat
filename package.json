@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "python scripts/pr3_current_main_patch.py",
     "dev": "vite",
+    "prebuild": "python scripts/pr3_current_main_patch.py",
     "build": "vite build",
     "preview": "vite preview"
   },

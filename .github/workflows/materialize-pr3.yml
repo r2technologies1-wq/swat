@@ -1,0 +1,36 @@
+name: Materialize PR3
+
+on:
+  push:
+    branches: [combine-replit-preview]
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: combine-replit-preview
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply current-main Combine UX patch
+        run: python scripts/pr3_current_main_patch.py
+      - name: Install dependencies
+        run: npm install
+      - name: Build app
+        run: npm run build
+      - name: Commit materialized source
+        run: |
+          if git diff --quiet -- CornerbackProject.jsx; then
+            echo "No source changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CornerbackProject.jsx package-lock.json
+          git commit -m "Make today's Combine workout explicit and recordable"
+          git push origin HEAD:combine-replit-preview
