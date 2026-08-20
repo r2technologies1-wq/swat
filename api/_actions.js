@@ -73,7 +73,7 @@ const TYPE_KEYS = {
   log_recovery: ["sleep_hours", "sleep_score", "feel"],
   weekly_checkin: ["bodyweight", "waist", "knee", "feel"],
   log_note: [],
-  set_goal: ["key", "target"],
+  set_goal: ["key", "target", "active", "priority"],
   set_knee: ["status"],
   set_availability: ["dow", "minutes"],
   set_day_time: ["minutes"],
@@ -135,7 +135,7 @@ function cleanValue(key, value) {
   if (["minutes", "duration"].includes(key)) return cleanNumber(value, 0, 300);
   if (["weight", "actual_weight", "next_weight", "bodyweight"].includes(key)) return cleanNumber(value, 0, 1000);
   if (key === "reps") return Array.isArray(value) ? cleanArray(value, (v) => cleanNumber(v, 0, 1000)) : cleanNumber(value, 0, 1000);
-  if (["reps", "rir", "observed_rir", "session_rpe", "sleep_hours", "sleep_score", "waist", "ounces", "severity", "level", "stage", "dow", "completion_fraction"].includes(key)) return cleanNumber(value, 0, key === "completion_fraction" ? 1 : 1000);
+  if (["reps", "rir", "observed_rir", "session_rpe", "sleep_hours", "sleep_score", "waist", "ounces", "severity", "level", "stage", "dow", "priority", "completion_fraction"].includes(key)) return cleanNumber(value, 0, key === "completion_fraction" ? 1 : key === "priority" ? 3 : 1000);
   if (["active", "travel", "no_gym", "noGym", "no_equipment", "noEquipment"].includes(key)) return cleanBool(value);
   if (["exercises", "exercises_completed", "exercises_skipped", "remove_exercises", "fatigue_areas", "pain_areas", "reps"].includes(key)) return cleanArray(value);
   if (key === "add_exercises") return Array.isArray(value) ? value.slice(0, 12).map((x) => {

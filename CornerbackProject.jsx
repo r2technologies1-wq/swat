@@ -646,6 +646,14 @@ const ROADMAP = [
     body: "Test: 225 bench stretch goal · 20+ pull-ups · muscle-up · physique, waist and bodyweight check." },
 ];
 
+const SPORT_RULES = [
+  { label: "Speed before fatigue", rule: "Acceleration, route-speed and jump work stay crisp. If legs are cooked, the app preserves the stimulus later instead of practicing slow reps." },
+  { label: "Strength supports field output", rule: "Bench, rows, pull-ups and posterior-chain work build force and durability, but the week avoids stacking hard lower work into hard running." },
+  { label: "Engine without interference", rule: "Easy aerobic work can ride with upper lifting or travel days; hard conditioning usually owns the day." },
+  { label: "Joint tolerance gates ambition", rule: "Knee, sleep, HRV/readiness and pain reports cap impact, cutting, jumping and hard run exposure before motivation makes a dumb call." },
+  { label: "Specific enough, not random", rule: "Modules map to cornerback/receiver needs: acceleration, change of direction, vertical pull, press strength, trunk stiffness, hips, calves, and aerobic repeatability." },
+];
+
 const GOALS = [
   { key: "mile",   label: "Mile",        start: "5:57", target: "5:30", unit: "time", targetSec: 330, startSec: 357 },
   { key: "fiveK",  label: "5K",          start: "21:55", target: "Sub-20:00", unit: "time", targetSec: 1200, startSec: 1315 },
@@ -657,6 +665,38 @@ const GOALS = [
   { key: "speed",  label: "Speed / agility", start: "Baseline TBD", target: "Meaningful gain, knee intact", unit: "note" },
   { key: "vertical", label: "Vertical / dunk", start: "Baseline TBD", target: "Meaningful vertical gain + progress toward dunking", unit: "note" },
 ];
+
+function normalizeGoalKey(value) {
+  const s = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!s) return null;
+  const compact = s.replace(/\s+/g, "");
+  const direct = GOALS.find((g) => g.key.toLowerCase() === compact || g.label.toLowerCase() === s);
+  if (direct) return direct.key;
+  if (/5k|fivek|five k|five kilometer|five kilometres|sub 20/.test(s)) return "fiveK";
+  if (/mile|1600/.test(s)) return "mile";
+  if (/bench|press/.test(s)) return "bench";
+  if (/pull/.test(s)) return "pullup";
+  if (/muscle up|muscleup|\bmu\b/.test(s)) return "mu";
+  if (/bodyweight|body weight|weight|lean mass|bulk/.test(s)) return "bw";
+  if (/abs|abdominal|physique|six pack|lean/.test(s)) return "abs";
+  if (/speed|agility|corner|route|cutting|cod|change of direction/.test(s)) return "speed";
+  if (/vertical|jump|dunk/.test(s)) return "vertical";
+  return null;
+}
+
+function pr5GoalActive(state, key) {
+  const k = normalizeGoalKey(key) || key;
+  const o = ((state && state.goalOverrides) || {})[k] || {};
+  return o.active !== false;
+}
+
+function pr5ActiveGoals(state) {
+  return GOALS.filter((g) => pr5GoalActive(state, g.key));
+}
+
+function pr5PausedGoals(state) {
+  return GOALS.filter((g) => !pr5GoalActive(state, g.key));
+}
 
 /* Combine checklist item metadata (non-exercise entries) */
 const CAL_BASELINES = [
@@ -1432,14 +1472,16 @@ function pr5EstimatedBench1RM(state) {
   return best || null;
 }
 function pr5GoalProgressDetail(state, key, today) {
+  key = normalizeGoalKey(key) || key;
   const cal = (state.calibration && state.calibration.values) || {};
   const met = state.metrics || {};
   const ov = state.goalOverrides || {};
   const timeProgress = pr5Clamp(daysBetween(SEP_START, today) / Math.max(1, daysBetween(SEP_START, "2026-12-31")), 0, 1);
   const finish = (progress, known) => {
     const p = pr5Clamp(Number(progress) || 0, 0, 1);
-    return { progress: p, expected: timeProgress, lag: Math.max(0, timeProgress - p), ahead: Math.max(0, p - timeProgress), known: known !== false };
+    return { progress: p, expected: timeProgress, lag: Math.max(0, timeProgress - p), ahead: Math.max(0, p - timeProgress), known: known !== false, inactive: !pr5GoalActive(state, key) };
   };
+  if (!pr5GoalActive(state, key)) return { progress: 0, expected: timeProgress, lag: 0, ahead: 0, known: true, inactive: true };
   if (key === "bench") {
     const cur = pr5EstimatedBench1RM(state); const target = (ov.bench && ov.bench.targetVal) || 225;
     const start = 180; return finish(cur == null ? .05 : (cur - start) / Math.max(1, target - start), cur != null);
@@ -1471,9 +1513,10 @@ function pr5GoalProgress(state, key, today) {
 }
 function pr5GoalUrgencies(state, today) {
   const performanceKeys = new Set(["bench","mile","fiveK","pullup","mu","speed","vertical"]);
-  return GOALS.map((g) => {
+  return pr5ActiveGoals(state).map((g) => {
     const detail = pr5GoalProgressDetail(state, g.key, today);
-    const base = PR5_IMPORTANCE[g.key] || (performanceKeys.has(g.key) ? 1 : .6);
+    const priority = Number(((state.goalOverrides || {})[g.key] || {}).priority || 1);
+    const base = (PR5_IMPORTANCE[g.key] || (performanceKeys.has(g.key) ? 1 : .6)) * pr5Clamp(priority, .35, 1.8);
     const unknownBoost = !detail.known || ((g.key === "speed" || g.key === "vertical") && detail.progress === 0) ? .22 : 0;
     const urgency = base * pr5Clamp(.32 + (detail.lag * 2.25) + ((1 - detail.progress) * .42) + unknownBoost - (detail.ahead * .70), .12, 2.4);
     return { key: g.key, label: g.label, ...detail, urgency };
@@ -1773,17 +1816,19 @@ function pr5ModuleRows(key, minutes, stage, state, dateStr, context) {
 function pr5ModuleLabel(key) {
   return (PR5_STIMULI[key] && PR5_STIMULI[key].label) || (PR5_MODULES[key] && PR5_MODULES[key].label) || key;
 }
-function pr5GoalKeysForModules(modules, limit) {
+function pr5GoalKeysForModules(modules, limit, state) {
   var score = {};
+  var active = state ? new Set(pr5ActiveGoals(state).map(function (g) { return g.key; })) : null;
   (modules || []).forEach(function (moduleKey) {
     Object.entries(PR5_GOAL_MAP).forEach(function (pair) {
       var goalKey = pair[0], map = pair[1];
-      if (map[moduleKey]) score[goalKey] = (score[goalKey] || 0) + Number(map[moduleKey] || 0);
+      if (map[moduleKey] && (!active || active.has(goalKey))) score[goalKey] = (score[goalKey] || 0) + Number(map[moduleKey] || 0);
     });
   });
   return Object.keys(score).sort(function (a,b) { return score[b] - score[a]; }).slice(0, limit || 4);
 }
 function pr5GoalLabel(key) {
+  key = normalizeGoalKey(key) || key;
   if (key === "recovery") return "Recovery";
   var g = GOALS.find(function (x) { return x.key === key; });
   return g ? g.label : key;
@@ -1796,9 +1841,9 @@ function pr5DayModules(day) {
   }
   return [];
 }
-function pr5DayGoalKeys(day) {
+function pr5DayGoalKeys(day, state) {
   if (day && Array.isArray(day.goalKeys) && day.goalKeys.length) return day.goalKeys;
-  return pr5GoalKeysForModules(pr5DayModules(day), 4);
+  return pr5GoalKeysForModules(pr5DayModules(day), 4, state);
 }
 function pr5ModuleCreditValue(key, minutes) {
   if (minutes != null && Number(minutes) < 15) return .5;
@@ -1868,6 +1913,7 @@ function pr5ModuleRank(key, budget, projected) {
 }
 function pr5ModuleEligible(mod, d, state, prevMeta, log) {
   const sys = fatigueLevelAt(state.fatigue, "systemic", d);
+  if (mod.key === "verticalPower" && !pr5GoalActive(state, "vertical") && !pr5GoalActive(state, "speed")) return false;
   if (mod.hard && sys >= 2) return false;
   if (maxAreaFatigue(state.fatigue, mod.areas || [], d) >= 2) return false;
   if (mod.hard && pr5RecentAreaLoad(log || state.log || [], mod.areas || [], d) >= 2) return false;
@@ -1917,7 +1963,7 @@ function pr5BuildStrengthDay(d, available, budget, projected, state, prevMeta, l
   let carrier = family === "lower" ? (state.settings.knee === "irritated" ? "BSAFE" : "B") : family === "accessory" ? "D" : (chosen.some((m)=>m.key==="pressStrength") ? "A" : "C");
   if (carrier === "C" && maxAreaFatigue(state.fatigue,["chest","shoulders","triceps"],d) >= 1) carrier="CPULL";
   const labels=chosen.map((m)=>m.label);
-  const goalKeys = pr5GoalKeysForModules(moduleKeys, 4);
+  const goalKeys = pr5GoalKeysForModules(moduleKeys, 4, state);
   const focus = budget.focus.map((g)=>g.label).slice(0,2).join(" + ");
   return {
     id:carrier, family, hard:chosen.some((m)=>m.hard), areas:Array.from(new Set(chosen.flatMap((m)=>m.areas||[]))), modules:moduleKeys, goalKeys,
@@ -1946,7 +1992,7 @@ function pr5RunDay(kind, d, available, budget, projected, state, prevMeta, log) 
   });
   const runOverride = hard ? runRxFor(d,SLOT_OF[id]) : (available <= 30 ? "20–30 min conversational" : runRxFor(d,"EASY"));
   return {
-    id, family:hard?"runHard":"easy", hard, areas:lowerAreas, modules, goalKeys:pr5GoalKeysForModules(modules, 4),
+    id, family:hard?"runHard":"easy", hard, areas:lowerAreas, modules, goalKeys:pr5GoalKeysForModules(modules, 4, state),
     displayName:hard ? "Adaptive Session — Quality Run" : "Adaptive Session — Easy Aerobic" + (modules.length>1 ? " + " + modules.slice(1).map((x)=>PR5_MODULES[x].label).join(" + ") : ""),
     displayShort:hard ? "Quality Run" : "Easy Aerobic" + (modules.includes("core") ? " + Core" : ""),
     displayDesc:hard ? "Today's running dose earns the highest-value conditioning adaptation without stacking lower-body fatigue." : "Easy aerobic work builds the engine and can absorb low-fatigue accessories when recovery allows.",
@@ -1974,7 +2020,10 @@ function pr5MicroRowsForKey(key, minutes, state, d, constraints) {
     : noGym
       ? [["stepUp","2 × 8/side","pain-free hotel/stair option"],["calfRaise","2 × 15","lower-leg capacity"]]
       : [["rdl","2 × 6–8","quick hinge dose"]];
-  if (key === "verticalPower") return knee === "irritated" ? [] : [["snapDown","3 × 3","own the landing"],["calfRaise","2 × 12–15","jump foundation"]];
+  if (key === "verticalPower") {
+    if (knee === "irritated" || (!pr5GoalActive(state, "vertical") && !pr5GoalActive(state, "speed"))) return [];
+    return [["snapDown","3 × 3","own the landing"],["calfRaise","2 × 12–15","jump foundation"]];
+  }
   if (key === "arms") return noGym
     ? [["pushup","1 close-grip clean set","triceps microdose"]]
     : [["hammer","2 × 10–12","biceps"],["pressdown","2 × 10–12","triceps"]];
@@ -1998,7 +2047,7 @@ function pr5BuildMicroDay(d, available, budget, projected, state, prevMeta, log)
     const modules = [key];
     const labels = modules.map(pr5ModuleLabel);
     const areas = Array.from(new Set(rows.flatMap((r)=>PR5_EXERCISE_AREAS[r[0]] || [])));
-    const goalKeys = pr5GoalKeysForModules(modules, 4);
+    const goalKeys = pr5GoalKeysForModules(modules, 4, state);
     const noGymText = constraints.noGym || constraints.travel || constraints.noEquipment ? " Travel/no-gym constraint: using portable work." : "";
     return {
       id:isRun ? "MICRORUN" : "MICRO", family:isRun ? "runHard" : (PR5_STIMULI[key] && PR5_STIMULI[key].family) || "accessory",
@@ -2040,7 +2089,7 @@ function pr5BuildSupportDay(d, available, budget, projected, state, prevMeta, lo
   if (!rows.length) return null;
   const hasEasy = moduleKeys.includes("easyAerobic");
   const labels = moduleKeys.map(pr5ModuleLabel);
-  const goalKeys = pr5GoalKeysForModules(moduleKeys, 4);
+  const goalKeys = pr5GoalKeysForModules(moduleKeys, 4, state);
   return {
     id:hasEasy ? (state.settings.knee === "irritated" ? "EASYXT" : "EASY") : "D",
     family:hasEasy ? "easy" : "accessory", hard:false, support:true, creditValue:.35,
@@ -2066,7 +2115,7 @@ function goalDrivenPlanWeek(ctx) {
   dates.forEach((d)=>{
     const e=byDate[d];
     if (e && (e.status==="completed"||e.status==="partial"||e.status==="skipped")) {
-      const short=e.status==="skipped"?"Skipped":pr5DynamicLabelFromEntry(e); days.push({date:d,id:e.sessionId,status:e.status,reasons:[],entry:e,displayShort:short,displayName:e.status==="skipped"?"Skipped / reflowed":short,availableMinutes:avail(d),goalKeys:pr5GoalKeysForModules(Object.keys(pr5EntryCredits(e)).filter((k)=>PR5_STIMULI[k]),4)});
+      const short=e.status==="skipped"?"Skipped":pr5DynamicLabelFromEntry(e); days.push({date:d,id:e.sessionId,status:e.status,reasons:[],entry:e,displayShort:short,displayName:e.status==="skipped"?"Skipped / reflowed":short,availableMinutes:avail(d),goalKeys:pr5GoalKeysForModules(Object.keys(pr5EntryCredits(e)).filter((k)=>PR5_STIMULI[k]),4,state)});
       if (e.status==="completed"||e.status==="partial") { prevMeta=actualMeta(e); consecutive = prevMeta.family && prevMeta.family!=="recovery" ? consecutive+1 : 0; if(prevMeta.family==="recovery") recoveryPlaced=true; }
       return;
     }
@@ -2108,7 +2157,7 @@ function goalDrivenPlanWeek(ctx) {
       if(id==="REC"){projected.recovery=(projected.recovery||0)+1;recoveryPlaced=true;} else projected.core=(projected.core||0)+1;
       prevMeta={family:"recovery",areas:[],hard:false}; consecutive=0; return;
     }
-    days.push({date:d,id:choice.id,status:"planned",reasons:choice.reasons||[],displayName:choice.displayName,displayShort:choice.displayShort,displayDesc:choice.displayDesc,autoOverride:choice.autoOverride||null,availableMinutes:minutes,goalKeys:choice.goalKeys||pr5GoalKeysForModules(choice.modules||[],4)});
+    days.push({date:d,id:choice.id,status:"planned",reasons:choice.reasons||[],displayName:choice.displayName,displayShort:choice.displayShort,displayDesc:choice.displayDesc,autoOverride:choice.autoOverride||null,availableMinutes:minutes,goalKeys:choice.goalKeys||pr5GoalKeysForModules(choice.modules||[],4,state)});
     (choice.modules||[]).forEach((k)=>{ projected[k]=(projected[k]||0)+(choice.creditValue||pr5ModuleCreditValue(k, minutes)); });
     if(choice.support) projected.support=(projected.support||0)+1;
     prevMeta={family:choice.family,areas:choice.areas||[],hard:!!choice.hard}; consecutive++;
@@ -2116,7 +2165,7 @@ function goalDrivenPlanWeek(ctx) {
   if(!recoveryPlaced && gap("recovery")>0) {
     for(let i=days.length-1;i>=0;i--){ const d=days[i]; if(d.date>=today&&d.status==="planned"){ d.id="REC";d.displayName="Recovery — Planned";d.displayShort="Recovery";d.displayDesc="The weekly forecast reserves one low-stress day so the work can turn into adaptation.";d.reasons=["Recovery is a required input to the Dec 31 plan."];d.autoOverride=null;d.goalKeys=["recovery"];projected.recovery=(projected.recovery||0)+1;break; } }
   }
-  const pct=pr5BudgetPct(done,budgetDef); const focusText=budget.focus.map((g)=>g.label).join(" · ");
+  const pct=pr5BudgetPct(done,budgetDef); const focusText=budget.focus.map((g)=>g.label).join(" · ") || "maintenance / recovery";
   return { days,dropped:[],notes:["Goal-derived prescription — current focus: "+focusText+". Weekly targets are outputs, not permanent rules."],done,projected,pct,forecastPct:pr5BudgetPct(projected,budgetDef),
     message:"The calendar is today's best forecast toward Dec 31. Log what actually happens and it will re-compose from the remaining goals, recovery and time.",
     phase:phaseOf(today),effPhase:phaseOf(addDays(ws,3)),calMode:false,weekStart:ws,budgetDef,strategy:{focus:budget.focus,scores:budget.scores,stage:budget.stage} };
@@ -2438,7 +2487,8 @@ function buildCoachSystem(state, plan, today) {
   var currentBudget = plan.budgetDef || BUDGET_DEF;
   var budget = currentBudget.map(function (b) { return b.label + " " + (plan.done[b.key] || 0) + "/" + b.target; }).join(", ");
   var ov = state.goalOverrides || {};
-  var goals = GOALS.map(function (g) { return g.label + " -> " + ((ov[g.key] && ov[g.key].label) || g.target); }).join("; ");
+  var activeGoals = pr5ActiveGoals(state).map(function (g) { return g.label + " -> " + ((ov[g.key] && ov[g.key].label && ov[g.key].label !== "Paused") || g.target); }).join("; ") || "none";
+  var pausedGoals = pr5PausedGoals(state).map(function (g) { return g.label + (ov[g.key] && ov[g.key].reason ? " (" + ov[g.key].reason + ")" : ""); }).join("; ") || "none";
   var kneeTxt = state.settings.knee;
   var skillTxt = cbStageFor(kneeTxt, state.settings.skillStage);
   var benchW = state.exercises.benchA.weight;
@@ -2458,18 +2508,21 @@ function buildCoachSystem(state, plan, today) {
   var lastCheck = (state.weeklyCheckins || []).slice(-1)[0];
   var checkText = lastCheck ? (lastCheck.date + " weight=" + (lastCheck.bodyweight == null ? "?" : lastCheck.bodyweight) + " waist=" + (lastCheck.waist == null ? "?" : lastCheck.waist) + " feel=" + (lastCheck.feel || "") + " knee=" + (lastCheck.knee || "")) : "none yet";
   var activeText = state.activeWorkout ? ("ACTIVE " + state.activeWorkout.date + " " + (SESSIONS[state.activeWorkout.sessionId] ? SESSIONS[state.activeWorkout.sessionId].short : state.activeWorkout.sessionId) + " tier=" + state.activeWorkout.tier + " started=" + new Date(state.activeWorkout.startedAt).toISOString()) : "none";
+  var sportRules = SPORT_RULES.map(function (r) { return r.label + ": " + r.rule; }).join(" | ");
   return (
     "You are the always-available personalized trainer/coach brain inside the Cornerback Project. The athlete can talk to you whenever they want — before, during, or after training, on rest days, or days later about something that happened earlier. The app is the body/database; you are the adaptive reasoning layer. Motto: win the block, not the day. Never use shame or streak language. Be concise, specific, and action-oriented.\n" +
     "Today: " + today + " (phase " + plan.effPhase + "). Knee: " + kneeTxt + ". Coverage Skills stage: " + skillTxt + "/4. Bench working weight: " + benchTxt + ".\n" +
-    "Week: " + dayLines + ".\nBudget: " + budget + ". Goals: " + goals + ".\n" +
+    "Week: " + dayLines + ".\nBudget: " + budget + ". Active goals: " + activeGoals + ". Paused goals: " + pausedGoals + ".\n" +
     "Today's prescribed session: " + (todaySession ? todaySession.name : "none") + ". Exercises: " + todayExerciseText + ".\n" +
     "Current fatigue (0-3, decays unless re-reported): " + (fatigueParts.join(", ") || "none") + ".\n" +
     "Recent coaching observations: " + memory + ".\nLong-term trainer facts: " + trainerFacts + ".\nRecent athlete timeline: " + recentEvents + ".\nRecent food/context: " + recentFood + ". Recent water: " + recentWater + ". Last weekly check-in: " + checkText + ". Active workout: " + activeText + ".\n" +
+    "SPORT PERFORMANCE RULESET: " + sportRules + ".\n" +
     "CORE BEHAVIOR: The static program is the starting hypothesis. A/B/C are anchor templates, NOT a push/pull/legs split and NOT sacred day types. The trainer may intelligently combine compatible stimuli on the same day (for example easy aerobic + pull-up skill + a short arms block, or condensed Upper C + 15–20 min easy aerobic) when that better serves the weekly goals. Actual performance data changes future prescription inside safe program constraints. If the user reports what actually happened, update structured state — do not only give advice. A session can be full, partial, skipped, substituted, or mixed. Credit only exercises/stimuli actually completed. Do not create debt for every missed accessory. Primary stimuli matter more than optional accessories.\n" +
     "If the user says the workout was too hard: identify local vs systemic fatigue, log it, and use adjust_week_from_feedback. Hard Upper A should suppress pressing but can leave legs available; hard Lower or hard run should protect the next 24-48h of lower-body intensity. If very hard/systemically wrecked, protect recovery.\n" +
     "If the user says too easy: do NOT punish with random volume. For an accessory that was clearly too easy, use exercise_feedback too_easy (one normal increment). If they mention a load, include actual_weight so the app can learn the load and set the next one. For bench, prefer log_bench with actual reps/RIR evidence rather than a blind jump. For running, record the observation and progress conservatively rather than making a huge one-session jump.\n" +
     "During a workout you may modify TODAY: if the user has a few more minutes, use extend_today_session to add one compatible goal-positive finisher or support block. If the user needs to leave, use shorten_today_session to keep the highest-value remaining work and reflow the rest. If an exercise hurts, remove it; if equipment is unavailable, remove/replace only what is needed. If they can do the session but need to move one exercise or combine test to tomorrow/later, use defer_exercises. For future one-off time constraints use set_day_time. For travel/no-gym/no-equipment use set_day_constraints. Pain is not a challenge to push through.\n" +
     "Food/lifestyle notes are low-friction context. Log them when the user volunteers them; do not demand calories/macros.\n" +
+    "GOAL MANAGEMENT: If the athlete changes what they care about, use set_goal instead of merely encouraging them. Examples: 'I don't care about dunking anymore' -> set_goal {key:'vertical', target:'paused', active:false}. 'Bring back vertical' -> set_goal {key:'vertical', target:'active', active:true}. 'Make the 5K the main goal' -> set_goal {key:'fiveK', target:'main priority', priority:1.35}. If they change a numeric target, set_goal with the new target. Paused goals should no longer drive workout selection, although overlapping active goals may keep safe supporting work.\n" +
     "TIMING: A report can describe now, earlier today, yesterday, after a prior workout, or the future. Preserve that distinction. Historical pain that has resolved is not current pain. Future availability is not a recurring weekday rule unless the athlete says it is.\n" +
     "MEMORY: Conversation is not the database. Use a specific logging action when available; otherwise use log_event for a useful timeline fact. Use remember_fact only for stable preferences, established tolerances, repeated patterns, or durable athlete facts — never make one noisy session a permanent rule.\n" +
     "REPLAN THRESHOLD: Most messages are log-only. Re-plan only when pain, meaningful fatigue/recovery, actual performance, missed/partial work, or availability materially changes the next training decision.\n" +
@@ -2478,7 +2531,7 @@ function buildCoachSystem(state, plan, today) {
     "complete_session {date?, feel?}; log_partial_session {date?, duration?, exercises_completed?, exercises_skipped?, feel?, session_rpe?, completion_fraction?, notes?}; skip_session {date?, reason?}; recalc_week {};\n" +
     "adjust_week_from_feedback {date?, session_rpe?, fatigue_areas?, systemic_fatigue?, pain_areas?, notes?}; set_fatigue {area,level,note?}; exercise_feedback {name,difficulty,actual_weight?,observed_rir?,note?} difficulty=too_easy|appropriate|too_hard; modify_today_session {remove_exercises?,add_exercises?,reason?}; defer_exercises {from_date?,to_date,exercises,reason?}; extend_today_session {date?,minutes?,reason?}; shorten_today_session {date?,minutes?,reason?}; set_today_time {minutes};\n" +
     "log_event {event_type,occurred_at?,body_area?,severity?,active?,context?,text?,data?}; remember_fact {key?,text,confidence?}; log_set {name,weight?,reps?,rir?,note?};\n" +
-    "log_bench {weight,reps?}; set_bench_weight {weight}; log_metric {kind,value}; log_food {text}; log_water {ounces}; log_recovery {sleep_hours?,sleep_score?,feel?,note?}; weekly_checkin {bodyweight?,waist?,knee?,feel?,note?}; log_note {text}; set_goal {key,target}; set_knee {status}; set_availability {dow,minutes}; set_day_time {date,minutes}; set_day_constraints {date?,travel?,no_gym?,no_equipment?,note?}; flag_exhausted {}; add_exercise {session,name,sets_reps?,weight?}; remove_exercise {name,session?}; set_exercise_weight {name,weight}; set_skill_stage {stage}.\n" +
+    "log_bench {weight,reps?}; set_bench_weight {weight}; log_metric {kind,value}; log_food {text}; log_water {ounces}; log_recovery {sleep_hours?,sleep_score?,feel?,note?}; weekly_checkin {bodyweight?,waist?,knee?,feel?,note?}; log_note {text}; set_goal {key,target,active?,priority?,reason?}; set_knee {status}; set_availability {dow,minutes}; set_day_time {date,minutes}; set_day_constraints {date?,travel?,no_gym?,no_equipment?,note?}; flag_exhausted {}; add_exercise {session,name,sets_reps?,weight?}; remove_exercise {name,session?}; set_exercise_weight {name,weight}; set_skill_stage {stage}.\n" +
     "Exercise names can be natural language. Dates YYYY-MM-DD; omit date for today. Multiple actions allowed. Never invent completed training. If the user says 'I only did bench and pullups', use log_partial_session — not complete_session. If they say 'that was brutal, adjust my week', use adjust_week_from_feedback so the calendar actually changes."
   );
 }
@@ -2537,6 +2590,9 @@ function localCoachExerciseLabel(name) {
   var id = localCoachResolvedExerciseId(name);
   return EXERCISE_DEFAULTS[id] ? EXERCISE_DEFAULTS[id].name : String(name || "exercise");
 }
+function localCoachGoalKeyFromText(lower) {
+  return normalizeGoalKey(lower);
+}
 
 function localCoachTurn(state, plan, today, userText) {
   var text = String(userText || "").trim();
@@ -2567,6 +2623,10 @@ function localCoachTurn(state, plan, today, userText) {
   var saysMoreTime = /(few more minutes|more minutes|extra minutes|extra time|more time|time to spare|spare.*minutes|what else can we do|what else should i do|add on|addon|finisher)/.test(lower);
   var saysLeaveEarly = /(need to leave|have to leave|gotta leave|got to leave|gotta go|have to go|need to go|cut.*short|wrap.*up|skip the rest|remove the rest|out of time|need to head out)/.test(lower);
   var saysTravel = /(travel|traveling|travelling|flight|airport|hotel|road trip|on the road|no gym|no equipment|hotel only|bodyweight only)/.test(lower);
+  var saysGoalOff = /(don't care|dont care|do not care|no longer|not anymore|not a goal|remove.*goal|drop.*goal|retire.*goal|pause.*goal|stop training.*for|stop chasing|don't want to train|dont want to train)/.test(lower);
+  var saysGoalOn = /(bring back|restore|resume|restart|make .*goal again|add .*goal)/.test(lower);
+  var saysGoalPriority = /(main goal|primary goal|priority|prioritize|focus on|main focus)/.test(lower);
+  var goalKey = (saysGoalOff || saysGoalOn || saysGoalPriority) ? localCoachGoalKeyFromText(lower) : null;
   var saysExerciseDefer = exercises.length > 0 &&
     /(can't|cannot|cant|won't|wont|unable|not able|can't do|cannot do|cant do|skip|move|push|defer|make it)/.test(lower) &&
     /(tomorrow|later|next day|today)/.test(lower) &&
@@ -2594,6 +2654,13 @@ function localCoachTurn(state, plan, today, userText) {
   }
   if (saysTravel) {
     add({ type: "set_day_constraints", date: targetDate, travel: /travel|traveling|travelling|flight|airport|hotel|road trip|on the road/.test(lower), no_gym: /no gym|hotel only|bodyweight only/.test(lower), no_equipment: /no equipment|bodyweight only/.test(lower), note: text });
+  }
+  if (goalKey && saysGoalOff) {
+    add({ type: "set_goal", key: goalKey, target: "paused", active: false, reason: text, date: today });
+  } else if (goalKey && saysGoalOn) {
+    add({ type: "set_goal", key: goalKey, target: "active", active: true, reason: text, date: today });
+  } else if (goalKey && saysGoalPriority) {
+    add({ type: "set_goal", key: goalKey, target: "main priority", active: true, priority: 1.35, reason: text, date: today });
   }
   if (saysExerciseDefer) {
     var deferredExercises = exercises.map(localCoachResolvedExerciseId);
@@ -2656,6 +2723,8 @@ function localCoachTurn(state, plan, today, userText) {
   var reply = "Saved locally. I turned that message into structured trainer data, so the next forecast can use it. The cloud AI endpoint is not connected in this local prototype yet, so I used the built-in extractor for this one.";
   if (actions.some(function (a) { return a.type === "defer_exercises"; })) {
     reply = "Got it. I moved that piece out of today's session and attached it to " + fmtShort(targetDate === today ? tomorrow : targetDate) + ". The local fallback handled this without the cloud AI endpoint.";
+  } else if (actions.some(function (a) { return a.type === "set_goal"; })) {
+    reply = "Got it. I updated that goal locally so the planner can rebuild the forecast around the goals you still care about.";
   } else if (actions.some(function (a) { return a.type === "modify_today_session" || a.type === "extend_today_session" || a.type === "shorten_today_session" || a.type === "set_day_time" || a.type === "set_day_constraints" || a.type === "skip_session"; })) {
     reply = "Got it. I updated the plan locally so the forecast can reflow around what you just told me.";
   }
@@ -2665,16 +2734,104 @@ function localCoachTurn(state, plan, today, userText) {
   };
 }
 
-function goalTargetToOverride(key, target) {
-  var s = String(target).trim();
+function goalTargetToOverride(key, target, active, reason, priority) {
+  key = normalizeGoalKey(key) || key;
+  var s = String(target == null ? "" : target).trim();
+  var lower = s.toLowerCase();
+  var explicitlyOff = active === false || /\b(remove|drop|retire|pause|stop|inactive|off|no longer|not anymore|do not care|don't care|dont care|not a goal)\b/.test(lower);
+  var explicitlyOn = active === true || /\b(restore|resume|active|on|restart|bring back)\b/.test(lower);
+  if (!GOALS.some(function (g) { return g.key === key; })) return null;
+  if (explicitlyOff) return { active: false, label: "Paused", reason: reason || s || "Paused by trainer chat" };
+  if (priority != null && Number.isFinite(Number(priority))) {
+    var priorityGoal = GOALS.find(function (g) { return g.key === key; });
+    return { active: true, label: priorityGoal ? priorityGoal.target : "Active", priority: pr5Clamp(Number(priority), .35, 1.8), reason: reason || s || "Priority changed by trainer chat" };
+  }
+  if (/\b(main|primary|priority|focus)\b/.test(lower) && !s.match(/\d/)) {
+    var mainGoal = GOALS.find(function (g) { return g.key === key; });
+    return { active: true, label: mainGoal ? mainGoal.target : "Active", priority: 1.35, reason: reason || s || "Priority raised by trainer chat" };
+  }
+  if (/\b(normal priority|standard priority|not main)\b/.test(lower)) {
+    var normalGoal = GOALS.find(function (g) { return g.key === key; });
+    return { active: true, label: normalGoal ? normalGoal.target : "Active", priority: 1, reason: reason || s || "Priority normalized by trainer chat" };
+  }
+  if (explicitlyOn && !s.match(/\d/)) {
+    var original = GOALS.find(function (g) { return g.key === key; });
+    return { active: true, label: original ? original.target : "Active", reason: reason || "Restored by trainer chat" };
+  }
   if (key === "mile" || key === "fiveK") {
     var sec = mmssToSec(s);
     if (sec == null) return null;
-    return { label: s, targetSec: sec };
+    return { active: true, label: s, targetSec: sec, reason: reason || "" };
   }
   var n = parseFloat(s);
   if (!Number.isFinite(n)) return null;
-  return { label: s.indexOf("lb") >= 0 || key === "pullup" ? s : s + (key === "bw" ? " lb" : key === "bench" ? " lb" : ""), targetVal: n };
+  return { active: true, label: s.indexOf("lb") >= 0 || key === "pullup" ? s : s + (key === "bw" ? " lb" : key === "bench" ? " lb" : ""), targetVal: n, reason: reason || "" };
+}
+
+function pr5GoalStatus(detail) {
+  if (detail.inactive) return { label: "paused", tone: "faint" };
+  if (!detail.known) return { label: "needs data", tone: "warn" };
+  if (detail.lag >= .18) return { label: "behind", tone: "bad" };
+  if (detail.lag >= .07) return { label: "watch", tone: "warn" };
+  if (detail.ahead >= .10) return { label: "ahead", tone: "good" };
+  return { label: "on pace", tone: "good" };
+}
+
+function pr5GoalAuditRows(state, plan, today) {
+  const budget = (plan && plan.budgetDef) || pr5DerivedBudget(state, today).rows;
+  const projected = (plan && plan.projected) || (plan && plan.done) || {};
+  const done = (plan && plan.done) || {};
+  return GOALS.map((g) => {
+    const detail = pr5GoalProgressDetail(state, g.key, today);
+    const status = pr5GoalStatus(detail);
+    const modules = Object.entries(PR5_GOAL_MAP[g.key] || {})
+      .sort((a, b) => Number(b[1]) - Number(a[1]))
+      .map(([key]) => key)
+      .filter((key) => PR5_STIMULI[key]);
+    const activeModuleRows = modules
+      .map((key) => budget.find((b) => b.key === key))
+      .filter(Boolean)
+      .filter((b) => Number(b.target || 0) > 0);
+    const floorCovered = activeModuleRows.filter((b) => Number(projected[b.key] || 0) >= Number(b.min || 0)).length;
+    const targetCovered = activeModuleRows.filter((b) => Number(projected[b.key] || 0) >= Number(b.target || 0)).length;
+    const weekText = detail.inactive
+      ? "not driving this week"
+      : activeModuleRows.length
+        ? floorCovered + "/" + activeModuleRows.length + " floors · " + targetCovered + "/" + activeModuleRows.length + " targets"
+        : "maintenance only";
+    return {
+      key: g.key,
+      label: g.label,
+      active: !detail.inactive,
+      detail,
+      status,
+      weekText,
+      modules: modules.slice(0, 4),
+      progressPct: Math.round(detail.progress * 100),
+      expectedPct: Math.round(detail.expected * 100),
+      done,
+      projected,
+    };
+  });
+}
+
+function pr5WeeklyCoverageRows(state, today) {
+  const currentWs = weekStartOf(today);
+  const rows = [];
+  for (let i = 3; i >= 0; i -= 1) {
+    const ws = addDays(currentWs, -7 * i);
+    if (ws < SEP_START) continue;
+    const budget = pr5DerivedBudget(state, addDays(ws, 3)).rows;
+    const done = pr5WeekDone((state && state.log) || [], ws, budget);
+    const required = budget.filter((b) => Number(b.target || 0) > 0 && !b.optional);
+    rows.push({
+      weekStart: ws,
+      pct: pr5BudgetPct(done, budget),
+      covered: required.filter((b) => Number(done[b.key] || 0) >= Number(b.min || 0)).length,
+      required: required.length,
+    });
+  }
+  return rows;
 }
 
 /* ENGINE-END */
@@ -2816,6 +2973,7 @@ function mergePostgresHydration(state, snapshot) {
     metrics,
     dayWorkoutOverrides: { ...((snapshot || {}).dayWorkoutOverrides || {}), ...(state.dayWorkoutOverrides || {}) },
     dayFlags: { ...((snapshot || {}).dayFlags || {}), ...(state.dayFlags || {}) },
+    goalOverrides: { ...((snapshot || {}).goalOverrides || {}), ...(state.goalOverrides || {}) },
     ui: { ...state.ui, postgresHydratedAt: Date.now() },
   };
 }
@@ -3155,7 +3313,9 @@ function makeActions(setState, notify) {
       notify(exName + " removed from " + slot + " days.");
     },
     setGoalOverride(key, ov) {
-      up((s) => ({ ...s, goalOverrides: { ...s.goalOverrides, [key]: ov } }));
+      const k = normalizeGoalKey(key) || key;
+      up((s) => ({ ...s, goalOverrides: { ...s.goalOverrides, [k]: { ...(s.goalOverrides[k] || {}), ...ov, updatedAt: Date.now() } } }));
+      notify(ov && ov.active === false ? pr5GoalLabel(k) + " paused. Future forecasts stop chasing it." : pr5GoalLabel(k) + " goal updated.");
     },
     logBenchEntry(date, weight, reps) {
       up((s) => {
@@ -3260,6 +3420,15 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 .statuspill.warn{color:var(--warn);border-color:rgba(223,174,79,.42)}
 .statuspill.bad{color:var(--bad);border-color:rgba(217,107,107,.42)}
 .statusdot{width:6px;height:6px;border-radius:999px;background:currentColor;box-shadow:0 0 12px currentColor}
+.auditgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px}
+.audititem{border:1px solid var(--line);border-radius:8px;padding:12px;background:rgba(12,19,32,.65)}
+.audititem.paused{opacity:.58}
+.audititem .top{display:flex;gap:8px;justify-content:space-between;align-items:baseline}
+.audititem .name{font-weight:800;font-size:13.5px}
+.audititem .meta{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:6px}
+.audititem.good .statuspill{color:var(--good);border-color:rgba(67,201,138,.35)}
+.audititem.warn .statuspill{color:var(--warn);border-color:rgba(223,174,79,.42)}
+.audititem.bad .statuspill{color:var(--bad);border-color:rgba(217,107,107,.42)}
 .bar{height:5px;background:var(--raise);border-radius:3px;overflow:hidden;position:relative}
 .barfill{height:100%;background:var(--accent);border-radius:3px;transition:width .4s ease}
 .barfill.full{background:var(--good)}
@@ -3317,6 +3486,7 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 .kpi .l{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-family:var(--mono)}
 .goalrow{display:grid;grid-template-columns:110px 1fr 130px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .goalrow:last-child{border-bottom:none}
+.goalrow.paused{opacity:.55}
 .modal-scrim{position:fixed;inset:0;background:rgba(5,8,13,.72);z-index:60;display:flex;align-items:center;justify-content:center;padding:20px}
 .modal{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:22px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .monthcard{border-left:2px solid var(--line2);padding-left:16px;margin-top:18px}
@@ -3811,7 +3981,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
               {dayPlan.reasons.length ? dayPlan.reasons.map((r, i) => (<p key={i} style={{ marginTop: i ? 5 : 0 }}>{r}</p>)) : <p>This is the highest-priority safe session for the current block.</p>}
               {dayPlan.pinned && <p style={{ marginTop: 5 }}>Pinned here by you.</p>}
             </Collapse>
-            <DayImpactBox day={dayPlan} plan={plan} />
+            <DayImpactBox day={dayPlan} plan={plan} state={state} />
 
             {!isCal && (session.variants || (mergedOverride.add && mergedOverride.add.length)) && (
               <div style={{ marginTop: 16 }}>
@@ -3944,9 +4114,9 @@ function constraintText(day) {
   return bits.join(" · ");
 }
 
-function DayImpactBox({ day, plan }) {
+function DayImpactBox({ day, plan, state }) {
   const modules = pr5DayModules(day);
-  const goalKeys = pr5DayGoalKeys(day);
+  const goalKeys = pr5DayGoalKeys(day, state);
   const budgetRows = (plan.budgetDef || []).filter((b) => modules.includes(b.key) && Number(b.target || 0) > 0);
   const isMicro = day.id === "MICRO" || day.id === "MICRORUN" || Number(day.availableMinutes || 0) < 15;
   const constraints = constraintText(day);
@@ -3999,6 +4169,61 @@ function RoadmapForecastPanel({ plan }) {
       </div>
       <div className="miniBudget" style={{ marginTop: 10 }}>
         {keyRows.map((b) => <span key={b.key}>{b.label}: {fmtCredit(projected[b.key])}/{fmtCredit(b.target)}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function GoalAuditPanel({ state, plan, today, limit }) {
+  const rows = pr5GoalAuditRows(state, plan, today);
+  const active = rows.filter((r) => r.active);
+  const paused = rows.filter((r) => !r.active);
+  const shown = (limit ? active.slice(0, limit) : active).concat(limit ? [] : paused);
+  const behind = active.filter((r) => r.status.tone === "bad" || r.status.label === "watch");
+  const focus = plan && plan.strategy && Array.isArray(plan.strategy.focus) ? plan.strategy.focus.map((g) => g.label).join(" · ") : "";
+  return (
+    <div className="impactbox" style={{ marginTop: 12 }}>
+      <div className="eyebrow" style={{ color: "var(--accent)" }}>Goal progress audit</div>
+      <p className="small dim" style={{ marginTop: 6 }}>
+        {focus ? "Current training pressure: " + focus + ". " : ""}{behind.length ? "Watchlist: " + behind.map((r) => r.label).join(", ") + "." : "No active goal is screaming for a panic change."}
+      </p>
+      <div className="auditgrid">
+        {shown.map((r) => (
+          <div className={"audititem " + r.status.tone + (r.active ? "" : " paused")} key={r.key}>
+            <div className="top">
+              <span className="name">{r.label}</span>
+              <span className={"statuspill " + (r.status.tone === "faint" ? "" : r.status.tone)}><span className="statusdot" />{r.status.label}</span>
+            </div>
+            <div style={{ marginTop: 9 }}><Bar val={r.progressPct} max={100} full={r.progressPct >= 100} /></div>
+            <div className="meta">{r.active ? r.progressPct + "% progress · " + r.expectedPct + "% time · " + r.weekText : "not driving workouts"}</div>
+            {r.modules.length > 0 && <p className="small faint" style={{ marginTop: 6 }}>{r.modules.map(pr5ModuleLabel).join(" + ")}</p>}
+          </div>
+        ))}
+      </div>
+      {paused.length > 0 && limit && <p className="small faint" style={{ marginTop: 8 }}>Paused: {paused.map((r) => r.label).join(", ")}.</p>}
+      <p className="small faint" style={{ marginTop: 8 }}>Tell Coach to change goals, for example: "pause dunk goal", "make 5K the main goal", or "bring vertical back".</p>
+    </div>
+  );
+}
+
+function WeeklyCoveragePanel({ state, today }) {
+  const rows = pr5WeeklyCoverageRows(state, today);
+  if (!rows.length) return null;
+  return (
+    <div className="card">
+      <div className="eyebrow">Week-by-week coverage</div>
+      <p className="small dim" style={{ marginTop: 6 }}>Logged work creates the memory trail. The trainer compares each week against the goal-derived floors, then adjusts the next forecast instead of pretending every week was perfect.</p>
+      <div className="auditgrid">
+        {rows.map((r) => (
+          <div className={"audititem " + (r.pct >= 85 ? "good" : r.pct >= 55 ? "warn" : "bad")} key={r.weekStart}>
+            <div className="top">
+              <span className="name">{fmtShort(r.weekStart)}</span>
+              <span className={"statuspill " + (r.pct >= 85 ? "good" : r.pct >= 55 ? "warn" : "bad")}><span className="statusdot" />{r.pct}%</span>
+            </div>
+            <div style={{ marginTop: 9 }}><Bar val={r.pct} max={100} full={r.pct >= 100} /></div>
+            <div className="meta">{r.covered}/{r.required} weekly floors covered</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -4119,7 +4344,7 @@ function SessionDetailModal({ day, state, actions, plan, today, setTab, onClose 
       {session && day.autoOverride && day.autoOverride.reason && (
         <p className="small" style={{ color: "var(--accent)", marginTop: 8 }}>{day.autoOverride.reason}</p>
       )}
-      {session && <DayImpactBox day={day} plan={plan} />}
+      {session && <DayImpactBox day={day} plan={plan} state={state} />}
       {!session && <p className="small dim" style={{ marginTop: 10 }}>Nothing scheduled — rest is programmed, not a gap.</p>}
 
       {session && (
@@ -4197,7 +4422,7 @@ function MonthView({ state, today, anchor, setAnchor, onDay }) {
             {plans[ws].days.map((d) => {
               const inMonth = d.date.slice(0, 7) === anchor;
               const s = d.id ? SESSIONS[d.id] : null;
-              const goals = pr5DayGoalKeys(d).slice(0, 2).map(pr5GoalLabel).join(" · ");
+              const goals = pr5DayGoalKeys(d, state).slice(0, 2).map(pr5GoalLabel).join(" · ");
               return (
                 <button key={d.date}
                   className={"mcell" + (d.date === today ? " today" : "") + ((d.status === "completed" || d.status === "partial") ? " completed" : "") + (inMonth ? "" : " out")}
@@ -4254,7 +4479,7 @@ function WeekPlanner({ state, actions, plan, today, setTab }) {
                   <div className="dname" style={{ color: d.status === "skipped" ? "var(--faint)" : "var(--text)" }}>
                     {d.displayShort || (s ? s.short : d.status === "past" ? "—" : "Rest")}
                   </div>
-                  <div className="dgoals">{pr5DayGoalKeys(d).slice(0, 2).map(pr5GoalLabel).join(" · ")}</div>
+                  <div className="dgoals">{pr5DayGoalKeys(d, state).slice(0, 2).map(pr5GoalLabel).join(" · ")}</div>
                   <div className="dstat">
                     {statusIcon(d.status, d.id)}
                     <span>
@@ -4439,6 +4664,20 @@ function ProgramView({ state, actions, setTab, plan, today }) {
       </div>
 
       <div className="card">
+        <div className="eyebrow">Sport-performance ruleset</div>
+        <h2 className="sec">How the trainer thinks like a field athlete</h2>
+        <p className="small dim" style={{ marginTop: 6 }}>This is the curated knowledge layer the AI sees. It is not live NFL data; it is the guardrail that keeps recommendations specific to speed, coverage, strength, conditioning and durability.</p>
+        <div className="auditgrid">
+          {SPORT_RULES.map((r) => (
+            <div className="audititem" key={r.label}>
+              <div className="name">{r.label}</div>
+              <p className="small dim" style={{ marginTop: 6 }}>{r.rule}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
         <div className="eyebrow">Module library</div>
         <h2 className="sec">What the trainer can combine</h2>
         <p className="small dim" style={{ marginTop: 6 }}>These are menus, not static workouts. The trainer picks the day’s version from time, goal pressure, soreness, exercise feedback and what has already been banked.</p>
@@ -4528,27 +4767,34 @@ function ProgramView({ state, actions, setTab, plan, today }) {
 
 /* ----------------------------- ROADMAP VIEW ------------------------------ */
 
-function GoalRow({ g, snap, ov }) {
+function GoalRow({ g, snap, ov, state, today }) {
   const o = (ov || {})[g.key] || {};
+  const detail = pr5GoalProgressDetail(state, g.key, today);
+  const status = pr5GoalStatus(detail);
+  const active = !detail.inactive;
   const tSec = o.targetSec != null ? o.targetSec : g.targetSec;
   const tVal = o.targetVal != null ? o.targetVal : g.targetVal;
   const tBand = o.targetVal != null ? o.targetVal : g.bandLo;
-  const tLabel = o.label || g.target;
+  const tLabel = active ? (o.label && o.label !== "Paused" ? o.label : g.target) : "Paused";
   let cur = "—", pct = 0;
-  if (g.key === "mile") { cur = snap.mile; pct = pctTimeToward(snap.mile, g.startSec, tSec); }
-  if (g.key === "fiveK") { cur = snap.fiveK; pct = pctTimeToward(snap.fiveK, g.startSec, tSec); }
-  if (g.key === "bench") { cur = snap.bestBench + " lb"; pct = Math.min(100, Math.round((100 * snap.bestBench) / tVal)); }
-  if (g.key === "pullup") { cur = snap.lastPull + " reps"; pct = pctToward(snap.lastPull, g.startVal, tVal); }
-  if (g.key === "mu") { cur = snap.mu ? "Done" : "Not yet"; pct = snap.mu ? 100 : 0; }
-  if (g.key === "bw") { cur = snap.lastBw + " lb"; pct = pctToward(snap.lastBw, g.startVal, tBand); }
-  if (g.key === "abs" || g.key === "speed") { cur = "tracked at review"; pct = 0; }
-  if (g.key === "vertical") { cur = snap.vertical || "baseline pending"; pct = 0; }
+  if (!active) { cur = "paused"; pct = 0; }
+  else if (g.key === "mile") { cur = snap.mile; pct = pctTimeToward(snap.mile, g.startSec, tSec); }
+  else if (g.key === "fiveK") { cur = snap.fiveK; pct = pctTimeToward(snap.fiveK, g.startSec, tSec); }
+  else if (g.key === "bench") { cur = snap.bestBench + " lb"; pct = Math.min(100, Math.round((100 * snap.bestBench) / tVal)); }
+  else if (g.key === "pullup") { cur = snap.lastPull + " reps"; pct = pctToward(snap.lastPull, g.startVal, tVal); }
+  else if (g.key === "mu") { cur = snap.mu ? "Done" : "Not yet"; pct = snap.mu ? 100 : 0; }
+  else if (g.key === "bw") { cur = snap.lastBw + " lb"; pct = pctToward(snap.lastBw, g.startVal, tBand); }
+  else if (g.key === "abs" || g.key === "speed") { cur = "tracked at review"; pct = Math.round(detail.progress * 100); }
+  else if (g.key === "vertical") { cur = snap.vertical || "baseline pending"; pct = Math.round(detail.progress * 100); }
   return (
-    <div className="goalrow">
-      <div style={{ fontWeight: 700, fontSize: 13.5 }}>{g.label}</div>
+    <div className={"goalrow" + (active ? "" : " paused")}>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13.5 }}>{g.label}</div>
+        <span className={"statuspill " + (status.tone === "faint" ? "" : status.tone)} style={{ marginTop: 5 }}><span className="statusdot" />{status.label}</span>
+      </div>
       <div>
         <Bar val={pct} max={100} />
-        <div className="small faint" style={{ marginTop: 4 }}>{g.start} → {tLabel}</div>
+        <div className="small faint" style={{ marginTop: 4 }}>{g.start} → {tLabel}{active ? " · expected " + Math.round(detail.expected * 100) + "%" : ""}</div>
       </div>
       <div className="num small" style={{ textAlign: "right", color: "var(--ice)" }}>{cur}</div>
     </div>
@@ -4567,8 +4813,9 @@ function RoadmapView({ state, actions, plan, today, setTab }) {
         <h1 className="big">Faster. Stronger. Leaner. More durable.</h1>
         <p className="small dim" style={{ marginTop: 8 }}>Judged by weekly accumulation and monthly progress — never by perfect daily streaks. The calendar below turns these targets into this week's work.</p>
         <div style={{ marginTop: 14 }}>
-          {GOALS.map((g) => (<GoalRow g={g} snap={snap} ov={state.goalOverrides} key={g.key} />))}
+          {GOALS.map((g) => (<GoalRow g={g} snap={snap} ov={state.goalOverrides} state={state} today={today} key={g.key} />))}
         </div>
+        <GoalAuditPanel state={state} plan={plan} today={today} />
       </div>
 
       <div className="card">
@@ -4695,6 +4942,8 @@ function PerformanceView({ state, actions, plan, today }) {
       </div>
 
       <WeeklyCheckinCard state={state} actions={actions} today={today} />
+      <GoalAuditPanel state={state} plan={plan} today={today} limit={4} />
+      <WeeklyCoveragePanel state={state} today={today} />
 
       <div className="grid2">
         <div className="card">
@@ -5404,8 +5653,9 @@ function runCoachActions(list, ctx) {
       } else if (a.type === "weekly_checkin") {
         actions.logWeeklyCheckin(date, { bodyweight: a.bodyweight, waist: a.waist, knee: a.knee, feel: a.feel, note: a.note }); out.push("✓ weekly check-in saved");
       } else if (a.type === "set_goal") {
-        const ov = goalTargetToOverride(a.key, a.target);
-        if (ov) { actions.setGoalOverride(a.key, ov); out.push("✓ goal " + a.key + " → " + ov.label); }
+        const key = normalizeGoalKey(a.key) || a.key;
+        const ov = goalTargetToOverride(key, a.target, a.active, a.reason || a.note, a.priority);
+        if (ov) { actions.setGoalOverride(key, ov); out.push(ov.active === false ? "✓ " + pr5GoalLabel(key) + " paused; forecast rebuilt without that goal pressure" : "✓ goal " + pr5GoalLabel(key) + " → " + ov.label); }
         else out.push("• couldn't parse that goal target");
       } else if (a.type === "set_knee") {
         if (["good", "watch", "irritated"].indexOf(a.status) >= 0) { actions.setKnee(a.status); out.push("✓ knee → " + a.status); }

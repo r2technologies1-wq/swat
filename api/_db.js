@@ -681,6 +681,48 @@ function dayOverrideFromRow(row) {
   return Object.keys(out).length ? out : null;
 }
 
+function normalizeGoalKey(value) {
+  const s = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!s) return null;
+  const compact = s.replace(/\s+/g, "");
+  if (compact === "fivek" || /5k|fivek|five k|five kilometer/.test(s)) return "fiveK";
+  if (/mile|1600/.test(s)) return "mile";
+  if (/bench|press/.test(s)) return "bench";
+  if (/pull/.test(s)) return "pullup";
+  if (/muscle up|muscleup|\bmu\b/.test(s)) return "mu";
+  if (/bodyweight|body weight|weight/.test(s)) return "bw";
+  if (/abs|physique|lean/.test(s)) return "abs";
+  if (/speed|agility|corner|route|cutting|change of direction/.test(s)) return "speed";
+  if (/vertical|jump|dunk/.test(s)) return "vertical";
+  return ["mile", "bench", "pullup", "mu", "bw", "abs", "speed", "vertical"].includes(compact) ? compact : null;
+}
+
+function secondsFromMmss(value) {
+  const m = String(value || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function goalOverrideFromAction(row) {
+  const action = valueOfJson(row.action, {});
+  const key = normalizeGoalKey(action.key || action.goal);
+  if (!key) return null;
+  const target = String(action.target == null ? "" : action.target).trim();
+  const lower = target.toLowerCase();
+  const off = action.active === false || /\b(remove|drop|retire|pause|stop|inactive|off|no longer|not anymore|do not care|don't care|dont care|not a goal)\b/.test(lower);
+  const on = action.active === true || /\b(restore|resume|active|on|restart|bring back)\b/.test(lower);
+  if (off) return { key, override: { active: false, label: "Paused", reason: action.reason || action.note || target || "Paused by trainer chat", updatedAt: tsMs(row.created_at) } };
+  const override = { active: true, label: target || "Active", reason: action.reason || action.note || "", updatedAt: tsMs(row.created_at) };
+  const priority = asNumber(action.priority);
+  if (priority != null) override.priority = Math.max(0.35, Math.min(1.8, priority));
+  const sec = secondsFromMmss(target);
+  const num = Number.parseFloat(target);
+  if (sec != null) override.targetSec = sec;
+  else if (Number.isFinite(num)) override.targetVal = num;
+  else if (on && !target) override.label = "Active";
+  return { key, override };
+}
+
 export async function loadTrainerSnapshot({ athleteKey } = {}) {
   const db = getPool();
   if (!db) return { configured: false, hydrated: false, state: null };
@@ -697,6 +739,7 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
       sessions,
       feedback,
       overrides,
+      goalActions,
     ] = await Promise.all([
       client.query(
         `SELECT memory_key, text, confidence, last_seen_at
@@ -770,6 +813,14 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
          LIMIT 180`,
         [athlete.id],
       ),
+      client.query(
+        `SELECT action, created_at
+         FROM trainer_action_log
+         WHERE athlete_id = $1 AND action_type = 'set_goal'
+         ORDER BY created_at ASC
+         LIMIT 120`,
+        [athlete.id],
+      ),
     ]);
 
     const snapshot = {
@@ -837,6 +888,7 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
       coachMemory: { observations: [] },
       dayWorkoutOverrides: {},
       dayFlags: {},
+      goalOverrides: {},
     };
 
     metrics.rows.forEach((m) => {
@@ -869,6 +921,11 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
       if (row.override_type === "flag_exhausted") snapshot.dayFlags[date] = "exhausted";
       const patch = dayOverrideFromRow(row);
       if (patch) snapshot.dayWorkoutOverrides[date] = { ...(snapshot.dayWorkoutOverrides[date] || {}), ...patch };
+    });
+
+    goalActions.rows.forEach((row) => {
+      const parsed = goalOverrideFromAction(row);
+      if (parsed) snapshot.goalOverrides[parsed.key] = { ...(snapshot.goalOverrides[parsed.key] || {}), ...parsed.override };
     });
 
     return {
@@ -1024,6 +1081,26 @@ async function persistAction(client, athleteId, turnId, action, fallbackDate) {
          (athlete_id, turn_id, workout_date, exercise_name, weight, reps, rir, note, data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
       [athleteId, turnId, date, asText(action.name || "exercise", 160), asNumber(action.weight), asNumber(action.reps), asNumber(action.rir), actionText(action) || null, payload(action)],
+    );
+  } else if (type === "set_goal" && action.key) {
+    const goalKey = normalizeGoalKey(action.key) || asText(action.key, 80);
+    const target = asText(action.target || "", 240);
+    const inactive = action.active === false || /\b(remove|drop|retire|pause|stop|inactive|off|no longer|not anymore|do not care|don't care|dont care|not a goal)\b/i.test(target);
+    const priority = asNumber(action.priority);
+    const priorityText = priority != null ? ` Priority multiplier ${Math.max(0.35, Math.min(1.8, priority))}.` : "";
+    const text = inactive
+      ? `Goal ${goalKey} is paused and should not drive workout selection.`
+      : `Goal ${goalKey} target is ${target || "active"}.${priorityText}`;
+    await client.query(
+      `INSERT INTO trainer_memories (athlete_id, memory_key, text, confidence, data)
+       VALUES ($1, $2, $3, 0.95, $4::jsonb)
+       ON CONFLICT (athlete_id, memory_key) WHERE memory_key IS NOT NULL
+       DO UPDATE SET text = EXCLUDED.text,
+                     confidence = EXCLUDED.confidence,
+                     active = true,
+                     data = trainer_memories.data || EXCLUDED.data,
+                     last_seen_at = now()`,
+      [athleteId, "goal_" + goalKey, text, payload(action)],
     );
   } else if (["complete_session", "log_partial_session", "skip_session"].includes(type)) {
     const status = type === "complete_session" ? "completed" : type === "skip_session" ? "skipped" : "partial";

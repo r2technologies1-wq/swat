@@ -19,7 +19,7 @@ function snapTier(mins) {
 globalThis.__pr5 = {
   EXERCISE_DEFAULTS, SESSIONS, effectiveList, mergeDayOverrides, resizeGoalOverrideForTier,
   planWeek, pr5DerivedBudget, pr5WeekDone, pr5EntryCredits, pr5ModuleRows,
-  pr5ExerciseProgressionFromFeedback,
+  pr5ExerciseProgressionFromFeedback, normalizeGoalKey, pr5GoalActive, pr5GoalAuditRows,
   weekStartOf, addDays, applyFatigueRecord, localCoachTurn, pr5EffectiveWorkoutForDay,
   pr5LiveExtensionPatch, pr5LiveShortenPatch, snapTier
 };`,
@@ -193,6 +193,35 @@ test("goals on track do not create maximum volume everywhere", () => {
   const b = E.pr5DerivedBudget(state, "2026-11-09");
   const hardTargets = b.rows.filter((r) => ["pressStrength", "verticalPull", "horizontalPull", "lowerStrength", "qualityRun", "explosivePull"].includes(r.key)).reduce((sum, r) => sum + r.target, 0);
   assert.ok(hardTargets <= 5, "on-track goals should not max out every hard stimulus");
+});
+
+test("paused goals stop driving the forecast", () => {
+  const state = baseState({
+    settings: { skillStage: 4 },
+    goalOverrides: {
+      vertical: { active: false, label: "Paused", reason: "not training dunk right now" },
+      speed: { active: false, label: "Paused", reason: "not training speed right now" },
+    },
+  });
+  assert.equal(E.pr5GoalActive(state, "dunk"), false);
+  const budget = E.pr5DerivedBudget(state, "2026-10-15");
+  assert.ok(!budget.focus.some((g) => g.key === "vertical" || g.key === "speed"));
+  const verticalRow = budget.rows.find((r) => r.key === "verticalPower");
+  assert.ok(!verticalRow || verticalRow.target === 0);
+  const p = plan("2026-10-15", state);
+  assert.ok(!p.days.some((d) => (d.autoOverride && (d.autoOverride.modules || []).includes("verticalPower")) || (d.goalKeys || []).includes("vertical")));
+  const audit = E.pr5GoalAuditRows(state, p, "2026-10-15");
+  assert.equal(audit.find((r) => r.key === "vertical").active, false);
+});
+
+test("local coach can pause or prioritize long-term goals", () => {
+  const state = baseState();
+  const p = plan("2026-09-15", state);
+  assert.equal(E.normalizeGoalKey("fiveK"), "fiveK");
+  let r = E.localCoachTurn(state, p, "2026-09-15", "i dont care about dunking anymore");
+  assert.ok(r.actions.some((a) => a.type === "set_goal" && a.key === "vertical" && a.active === false));
+  r = E.localCoachTurn(state, p, "2026-09-15", "make 5K the main goal");
+  assert.ok(r.actions.some((a) => a.type === "set_goal" && a.key === "fiveK" && a.priority === 1.35));
 });
 
 test("large time window can combine compatible modules", () => {
