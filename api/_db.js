@@ -4,16 +4,21 @@ const { Pool } = pg;
 
 let pool;
 
+function databaseUrl() {
+  return process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
+}
+
 export function databaseConfigured() {
-  return Boolean(process.env.DATABASE_URL);
+  return Boolean(databaseUrl());
 }
 
 function getPool() {
   if (!databaseConfigured()) return null;
   if (!pool) {
-    const needsSsl = /neon\.tech|sslmode=require/i.test(process.env.DATABASE_URL || "");
+    const connectionString = databaseUrl();
+    const needsSsl = /neon\.tech|sslmode=require/i.test(connectionString || "");
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString,
       max: Number(process.env.PGPOOL_MAX || 4),
       ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
     });

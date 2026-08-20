@@ -7,15 +7,16 @@ import pg from "pg";
 const { Pool } = pg;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const migrationsDir = path.join(root, "db", "migrations");
+const databaseUrl = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
 
-if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL is required. Put your Neon connection string in .env or Replit Secrets.");
+if (!databaseUrl) {
+  console.error("NEON_DATABASE_URL or DATABASE_URL is required. Put your Neon connection string in .env or Replit Secrets.");
   process.exit(1);
 }
 
-const needsSsl = /neon\.tech|sslmode=require/i.test(process.env.DATABASE_URL);
+const needsSsl = /neon\.tech|sslmode=require/i.test(databaseUrl);
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl,
   ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
 });
 

@@ -1,4 +1,4 @@
-import { loadTrainerContext, persistTrainerTurn } from "./_db.js";
+import { databaseConfigured, loadTrainerContext, persistTrainerTurn } from "./_db.js";
 
 const MAX_SYSTEM_CHARS = 32000;
 const MAX_MESSAGE_CHARS = 6000;
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
   if (!process.env.OPENAI_API_KEY) {
     return res.status(200).json({
       configured: false,
-      db: { configured: Boolean(process.env.DATABASE_URL), loaded: false },
+      db: { configured: databaseConfigured(), loaded: false },
       text: JSON.stringify({
         reply: "The trainer brain is installed, but the server still needs its OPENAI_API_KEY environment variable. Nothing from this message was logged.",
         actions: [],
