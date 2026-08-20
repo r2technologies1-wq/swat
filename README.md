@@ -46,7 +46,7 @@ It does **not** combine hard run + hard lower work or ignore recent muscle fatig
 
 ## Data
 
-Progress is stored locally in the browser as an offline fallback. When `DATABASE_URL` is set, `/api/trainer` also saves structured trainer turns to Postgres: chat actions, durable facts, body metrics, recovery, food/water, workout sessions, exercise feedback, and day-level planner overrides.
+Progress is stored locally in the browser as an offline fallback. When `NEON_DATABASE_URL` is set, `/api/trainer` also saves structured trainer turns to Postgres: chat actions, durable facts, body metrics, recovery, food/water, workout sessions, exercise feedback, and day-level planner overrides.
 
 Server setup:
 
@@ -56,7 +56,7 @@ npm run migrate
 npm run dev
 ```
 
-Use Neon for `DATABASE_URL` and keep both `DATABASE_URL` and `OPENAI_API_KEY` in `.env` locally or Replit Secrets in Replit.
+Use Neon for `NEON_DATABASE_URL` and keep both `NEON_DATABASE_URL` and `OPENAI_API_KEY` in `.env` locally or Replit Secrets in Replit. `DATABASE_URL` is still accepted as a fallback.
 
 ## Apple Health
 

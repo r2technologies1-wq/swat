@@ -1,4 +1,5 @@
 import { databaseConfigured, loadTrainerContext, persistTrainerTurn } from "./_db.js";
+import { validateTrainerActions } from "./_actions.js";
 
 const MAX_SYSTEM_CHARS = 32000;
 const MAX_MESSAGE_CHARS = 6000;
@@ -91,7 +92,7 @@ Reply like a real trainer: conversational and concise. If you stored or changed 
 
   try {
     const dbContext = await loadTrainerContext({ athleteKey });
-    const model = process.env.OPENAI_MODEL || "gpt-5.6";
+    const model = process.env.OPENAI_MODEL || "gpt-5-mini";
     const apiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -114,6 +115,8 @@ Reply like a real trainer: conversational and concise. If you stored or changed 
     }
 
     const turn = normalizeTrainerTurn(extractResponseText(data));
+    const validation = validateTrainerActions(turn.actions);
+    turn.actions = validation.actions;
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     const saved = await persistTrainerTurn({
       athleteKey,
@@ -132,6 +135,9 @@ Reply like a real trainer: conversational and concise. If you stored or changed 
         saved: !!saved.saved,
         actionsSaved: saved.actionsSaved || 0,
         error: dbContext.error || saved.error || null,
+      },
+      validation: {
+        rejectedActions: validation.rejected.length,
       },
       text: JSON.stringify(turn),
     });
