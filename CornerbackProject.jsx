@@ -5003,6 +5003,71 @@ function TrainerBackendStatus({ compact = false }) {
   );
 }
 
+function TrainerProfileStatus() {
+  const [status, setStatus] = useState({ loading: true, latest: null, counts: {}, newSinceSummary: {}, configured: false, openai: false });
+  const [refreshing, setRefreshing] = useState(false);
+  const [message, setMessage] = useState("");
+  const load = useCallback(async (opts = {}) => {
+    try {
+      const r = await fetch("/api/trainer/profile?athleteKey=local-demo", { cache: "no-store" });
+      const d = await r.json();
+      setStatus({ loading: false, ...d });
+      if (opts.clearMessage !== false) setMessage("");
+    } catch (e) {
+      setStatus((prev) => ({ ...prev, loading: false, configured: false }));
+      setMessage("profile status unavailable");
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setMessage("");
+    try {
+      const r = await fetch("/api/trainer/profile/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ athleteKey: "local-demo" }),
+      });
+      const d = await r.json();
+      if (d.latest) setStatus((prev) => ({ ...prev, latest: d.latest, counts: d.counts || prev.counts, newSinceSummary: d.newSinceSummary || prev.newSinceSummary }));
+      const nextMessage = d.refreshed ? "profile refreshed" : (d.reason || (r.ok ? "profile current" : "refresh failed")).replace(/_/g, " ");
+      await load({ clearMessage: false });
+      setMessage(nextMessage);
+    } catch (e) {
+      setMessage("refresh failed");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const latest = status.latest || null;
+  const totalSignals = Object.values(status.counts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const newSignals = Object.values(status.newSinceSummary || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const profileClass = status.loading ? "" : latest ? " good" : totalSignals > 1 ? " warn" : "bad";
+  const profileText = status.loading ? "profile checking" : latest ? "profile live" : totalSignals > 1 ? "ready to summarize" : "no profile yet";
+  const last = latest && latest.generatedAt ? new Date(latest.generatedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+      <div className="statusline" style={{ marginTop: 0 }}>
+        <span className={"statuspill" + profileClass}><span className="statusdot" />{profileText}</span>
+        <span className="statuspill"><span className="statusdot" />{totalSignals} signals</span>
+        <span className="statuspill"><span className="statusdot" />{newSignals} new</span>
+      </div>
+      {latest && (
+        <p className="small dim" style={{ marginTop: 8 }}>
+          {latest.summary}
+        </p>
+      )}
+      <div className="btnrow">
+        <button className="btn subtle sm" onClick={refresh} disabled={refreshing}>
+          <RefreshCw size={13} /> {refreshing ? "Refreshing…" : "Refresh trainer profile"}
+        </button>
+        {(message || last) && <span className="small faint" style={{ alignSelf: "center" }}>{message || "last " + last}</span>}
+      </div>
+    </div>
+  );
+}
+
 function SettingsView({ state, actions }) {
   const [importText, setImportText] = useState("");
   const [showExport, setShowExport] = useState(false);
@@ -5044,11 +5109,12 @@ function SettingsView({ state, actions }) {
           Chat is the primary input. Messages become structured events, current state, and durable trainer memory. The model itself does not learn; the app saves the useful facts and includes them in the next trainer context.
         </p>
         <TrainerBackendStatus />
+        <TrainerProfileStatus />
         <div className="field" style={{ marginTop: 12 }}>
           <label>Trainer endpoint</label>
           <input className="input" placeholder="/api/trainer" value={state.settings.coachEndpoint || "/api/trainer"} onChange={(e) => actions.setCoachEndpoint(e.target.value)} />
         </div>
-        <p className="small faint" style={{ marginTop: 6 }}>Default: /api/trainer. Until that endpoint exists, common messages are handled by a local extractor and stored in this browser. Production should use Postgres tables plus a compact trainer profile summary.</p>
+        <p className="small faint" style={{ marginTop: 6 }}>Default: /api/trainer. If the endpoint is unavailable, common messages fall back to local extraction in this browser.</p>
         <div className="btnrow">
           <button className="btn subtle sm" onClick={actions.clearChat}>Clear chat history</button>
         </div>

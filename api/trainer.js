@@ -1,5 +1,6 @@
 import { databaseConfigured, loadTrainerContext, persistTrainerTurn } from "./_db.js";
 import { validateTrainerActions } from "./_actions.js";
+import { scheduleTrainerProfileRefresh } from "./_profile.js";
 
 const MAX_SYSTEM_CHARS = 32000;
 const MAX_MESSAGE_CHARS = 6000;
@@ -127,6 +128,7 @@ Reply like a real trainer: conversational and concise. If you stored or changed 
       model,
       dbContext: { loaded: !!dbContext.loaded, counts: dbContext.counts || null, error: dbContext.error || null },
     });
+    if (saved.saved) scheduleTrainerProfileRefresh({ athleteKey, reason: "trainer_turn" });
     return res.status(200).json({
       configured: true,
       db: {

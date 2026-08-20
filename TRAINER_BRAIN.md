@@ -20,3 +20,12 @@ Important recovery rule examples:
 - Partial sessions credit only exercises actually completed.
 
 The Coach can modify today's remaining session and the rest of the week from natural-language feedback.
+
+## Self-improving loop
+
+The model does not learn by changing its weights. The app improves by running a capture -> store -> retrieve -> inject loop:
+
+- `/api/trainer` turns natural text into validated actions, then stores the turn and structured signals in Neon.
+- `/api/trainer/profile/refresh` distills recent raw logs into a compact profile summary.
+- Future trainer calls load the compact profile plus recent raw history, so recommendations can reflect exercise feedback, load progression, missed work, travel, sleep, soreness, water, nutrition, and day constraints.
+- The profile refresh can run automatically after saved trainer turns, or manually from Settings while developing.
