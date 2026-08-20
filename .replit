@@ -33,3 +33,13 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 24678
+externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+TRAINER_ATHLETE_KEY = "local-demo"
+TRAINER_ATHLETE_NAME = "Ryan"
