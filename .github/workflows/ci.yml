@@ -19,5 +19,7 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install
+      - name: Check trainer API syntax
+        run: node --check api/trainer.js
       - name: Build app
         run: npm run build

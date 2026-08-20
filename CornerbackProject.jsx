@@ -159,11 +159,11 @@ function secToMmss(s) {
 }
 
 /* ======================= 3. PROGRAM DATA (editable) ======================= */
-/* Seeded from Cornerback Project V3. Weights are calibrated by the user —
-   only bench A carries a suggested start (~145) per the program.            */
+/* Seeded from Cornerback Project V3. Exercise loads stay unknown until
+   observed in training or explicitly entered by the athlete.                */
 
 const EXERCISE_DEFAULTS = {
-  benchA:    { name: "Barbell bench press",            weight: 145,  inc: 5,  unit: "lb", cal: true,  group: "A" },
+  benchA:    { name: "Barbell bench press",            weight: null, inc: 5,  unit: "lb", cal: true,  group: "A" },
   pullup:    { name: "Strict / weighted pull-up",      weight: 0,    inc: 5,  unit: "lb added", cal: false, bw: true, group: "A" },
   csRow:     { name: "Chest-supported DB row",         weight: null, inc: 5,  unit: "lb", cal: true,  group: "A" },
   inclineDb: { name: "Incline DB press",               weight: null, inc: 5,  unit: "lb", cal: true,  group: "A" },
@@ -1383,6 +1383,7 @@ function buildCoachSystem(state, plan, today) {
   var kneeTxt = state.settings.knee;
   var skillTxt = cbStageFor(kneeTxt, state.settings.skillStage);
   var benchW = state.exercises.benchA.weight;
+  var benchTxt = benchW == null ? "unknown / learning" : benchW + " lb";
   var todayPlan = plan.days.find(function (d) { return d.date === today; });
   var todaySession = todayPlan && todayPlan.id ? SESSIONS[todayPlan.id] : null;
   var mergedTodayOverride = mergeDayOverrides(todayPlan && todayPlan.autoOverride, (state.dayWorkoutOverrides || {})[today]);
@@ -1391,27 +1392,33 @@ function buildCoachSystem(state, plan, today) {
   var fatigueParts = [];
   FATIGUE_AREAS.concat(["systemic"]).forEach(function (a) { var lv = fatigueLevelAt(state.fatigue, a, today); if (lv > 0) fatigueParts.push(a + "=" + lv); });
   var memory = ((state.coachMemory || {}).observations || []).slice(-8).map(function (o) { return o.date + ": " + o.text; }).join(" | ") || "none yet";
+  var trainerFacts = (((state.trainerMemory || {}).facts) || []).slice(-12).map(function (f) { return (f.date || "") + ": " + f.text; }).join(" | ") || "none yet";
+  var recentEvents = (state.athleteEvents || []).slice(-12).map(function (e) { return (e.occurredAt || e.date || "") + " " + (e.eventType || "event") + (e.bodyArea ? " [" + e.bodyArea + "]" : "") + ": " + (e.text || e.context || ""); }).join(" | ") || "none yet";
   var recentFood = (state.nutrition || []).slice(-4).map(function (n) { return n.date + ": " + n.text; }).join(" | ") || "none";
   var recentWater = (state.hydration || []).slice(-6).map(function (n) { return n.date + ": " + n.ounces + " oz"; }).join(" | ") || "none";
   var lastCheck = (state.weeklyCheckins || []).slice(-1)[0];
   var checkText = lastCheck ? (lastCheck.date + " weight=" + (lastCheck.bodyweight == null ? "?" : lastCheck.bodyweight) + " waist=" + (lastCheck.waist == null ? "?" : lastCheck.waist) + " feel=" + (lastCheck.feel || "") + " knee=" + (lastCheck.knee || "")) : "none yet";
   var activeText = state.activeWorkout ? ("ACTIVE " + state.activeWorkout.date + " " + (SESSIONS[state.activeWorkout.sessionId] ? SESSIONS[state.activeWorkout.sessionId].short : state.activeWorkout.sessionId) + " tier=" + state.activeWorkout.tier + " started=" + new Date(state.activeWorkout.startedAt).toISOString()) : "none";
   return (
-    "You are the personalized trainer/coach brain inside the Cornerback Project. The app is the body/database; you are the adaptive reasoning layer. Motto: win the block, not the day. Never use shame or streak language. Be concise, specific, and action-oriented.\n" +
-    "Today: " + today + " (phase " + plan.effPhase + "). Knee: " + kneeTxt + ". Coverage Skills stage: " + skillTxt + "/4. Bench working weight: " + benchW + " lb.\n" +
+    "You are the always-available personalized trainer/coach brain inside the Cornerback Project. The athlete can talk to you whenever they want — before, during, or after training, on rest days, or days later about something that happened earlier. The app is the body/database; you are the adaptive reasoning layer. Motto: win the block, not the day. Never use shame or streak language. Be concise, specific, and action-oriented.\n" +
+    "Today: " + today + " (phase " + plan.effPhase + "). Knee: " + kneeTxt + ". Coverage Skills stage: " + skillTxt + "/4. Bench working weight: " + benchTxt + ".\n" +
     "Week: " + dayLines + ".\nBudget: " + budget + ". Goals: " + goals + ".\n" +
     "Today's prescribed session: " + (todaySession ? todaySession.name : "none") + ". Exercises: " + todayExerciseText + ".\n" +
     "Current fatigue (0-3, decays unless re-reported): " + (fatigueParts.join(", ") || "none") + ".\n" +
-    "Recent coaching observations: " + memory + ".\nRecent food/context: " + recentFood + ". Recent water: " + recentWater + ". Last weekly check-in: " + checkText + ". Active workout: " + activeText + ".\n" +
+    "Recent coaching observations: " + memory + ".\nLong-term trainer facts: " + trainerFacts + ".\nRecent athlete timeline: " + recentEvents + ".\nRecent food/context: " + recentFood + ". Recent water: " + recentWater + ". Last weekly check-in: " + checkText + ". Active workout: " + activeText + ".\n" +
     "CORE BEHAVIOR: The static program is the starting hypothesis. A/B/C are anchor templates, NOT a push/pull/legs split and NOT sacred day types. The trainer may intelligently combine compatible stimuli on the same day (for example easy aerobic + pull-up skill + a short arms block, or condensed Upper C + 15–20 min easy aerobic) when that better serves the weekly goals. Actual performance data changes future prescription inside safe program constraints. If the user reports what actually happened, update structured state — do not only give advice. A session can be full, partial, skipped, substituted, or mixed. Credit only exercises/stimuli actually completed. Do not create debt for every missed accessory. Primary stimuli matter more than optional accessories.\n" +
     "If the user says the workout was too hard: identify local vs systemic fatigue, log it, and use adjust_week_from_feedback. Hard Upper A should suppress pressing but can leave legs available; hard Lower or hard run should protect the next 24-48h of lower-body intensity. If very hard/systemically wrecked, protect recovery.\n" +
     "If the user says too easy: do NOT punish with random volume. For an accessory that was clearly too easy, use exercise_feedback too_easy (one normal increment). For bench, prefer log_bench with actual reps/RIR evidence rather than a blind jump. For running, record the observation and progress conservatively rather than making a huge one-session jump.\n" +
     "During a workout you may modify TODAY: if an exercise hurts, remove it; if equipment is unavailable, remove/replace only what is needed; if time collapses, use set_today_time and preserve the highest-value remaining work. Pain is not a challenge to push through.\n" +
     "Food/lifestyle notes are low-friction context. Log them when the user volunteers them; do not demand calories/macros.\n" +
+    "TIMING: A report can describe now, earlier today, yesterday, after a prior workout, or the future. Preserve that distinction. Historical pain that has resolved is not current pain. Future availability is not a recurring weekday rule unless the athlete says it is.\n" +
+    "MEMORY: Conversation is not the database. Use a specific logging action when available; otherwise use log_event for a useful timeline fact. Use remember_fact only for stable preferences, established tolerances, repeated patterns, or durable athlete facts — never make one noisy session a permanent rule.\n" +
+    "REPLAN THRESHOLD: Most messages are log-only. Re-plan only when pain, meaningful fatigue/recovery, actual performance, missed/partial work, or availability materially changes the next training decision.\n" +
     "Respond with ONLY raw JSON, no markdown/fences, shape {\"reply\":\"...\",\"actions\":[...]}.\n" +
     "Allowed actions:\n" +
     "complete_session {date?, feel?}; log_partial_session {date?, duration?, exercises_completed?, exercises_skipped?, feel?, session_rpe?, completion_fraction?, notes?}; skip_session {date?, reason?}; recalc_week {}; move_session {slot,to_date};\n" +
     "adjust_week_from_feedback {date?, session_rpe?, fatigue_areas?, systemic_fatigue?, pain_areas?, notes?}; set_fatigue {area,level,note?}; exercise_feedback {name,difficulty,observed_rir?,note?} difficulty=too_easy|appropriate|too_hard; modify_today_session {remove_exercises?,add_exercises?,reason?}; set_today_time {minutes};\n" +
+    "log_event {event_type,occurred_at?,body_area?,severity?,active?,context?,text?,data?}; remember_fact {key?,text,confidence?}; log_set {name,weight?,reps?,rir?,note?};\n" +
     "log_bench {weight,reps?}; set_bench_weight {weight}; log_metric {kind,value}; log_food {text}; log_water {ounces}; log_recovery {sleep_hours?,sleep_score?,feel?,note?}; weekly_checkin {bodyweight?,waist?,knee?,feel?,note?}; log_note {text}; set_goal {key,target}; set_knee {status}; set_availability {dow,minutes}; flag_exhausted {}; add_exercise {session,name,sets_reps?,weight?}; remove_exercise {name,session?}; set_exercise_weight {name,weight}; set_skill_stage {stage}.\n" +
     "Exercise names can be natural language. Dates YYYY-MM-DD; omit date for today. Multiple actions allowed. Never invent completed training. If the user says 'I only did bench and pullups', use log_partial_session — not complete_session. If they say 'that was brutal, adjust my week', use adjust_week_from_feedback so the calendar actually changes."
   );
@@ -1454,16 +1461,16 @@ function freshDefaultState() {
   const calValues = {};
   CAL_BASELINES.forEach((b) => { calValues[b.key] = b.seed || ""; });
   return {
-    version: 3,
+    version: 4,
     settings: {
       weekdayMinutes: { 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 75, 6: 60 },
       knee: "good",
       simDate: "",
       reminderOn: false,
       reminderTime: "07:00",
-      aiProvider: "claude",
+      aiProvider: "server",
       openaiKey: "",
-      coachEndpoint: "",
+      coachEndpoint: "/api/trainer",
       skillStage: 1,
     },
     exercises,
@@ -1473,6 +1480,8 @@ function freshDefaultState() {
     dayWorkoutOverrides: {},
     fatigue: { areas: {}, systemic: null },
     coachMemory: { observations: [] },
+    trainerMemory: { facts: [] },
+    athleteEvents: [],
     log: [],
     nutrition: [],
     hydration: [],
@@ -1508,6 +1517,8 @@ function mergeState(def, saved) {
   out.dayWorkoutOverrides = { ...(saved.dayWorkoutOverrides || {}) };
   out.fatigue = { areas: { ...(((saved.fatigue || {}).areas) || {}) }, systemic: (saved.fatigue || {}).systemic || null };
   out.coachMemory = { observations: Array.isArray((saved.coachMemory || {}).observations) ? saved.coachMemory.observations : [] };
+  out.trainerMemory = { facts: Array.isArray((saved.trainerMemory || {}).facts) ? saved.trainerMemory.facts : [] };
+  out.athleteEvents = Array.isArray(saved.athleteEvents) ? saved.athleteEvents : [];
   out.log = Array.isArray(saved.log) ? saved.log : [];
   out.nutrition = Array.isArray(saved.nutrition) ? saved.nutrition : [];
   out.hydration = Array.isArray(saved.hydration) ? saved.hydration : [];
@@ -1745,6 +1756,63 @@ function makeActions(setState, notify) {
       up((s) => {
         const obs = [ ...((s.coachMemory || {}).observations || []), { date, text: String(text) } ];
         return { ...s, notesLog: [...s.notesLog, { date, text, ts: Date.now() }].slice(-120), coachMemory: { observations: obs.slice(-80) } };
+      });
+    },
+    logAthleteEvent(date, payload) {
+      up((s) => {
+        const p = payload || {};
+        const event = {
+          id: "ev_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+          date,
+          occurredAt: p.occurredAt || p.occurred_at || date,
+          reportedAt: Date.now(),
+          source: p.source || "coach",
+          eventType: p.eventType || p.event_type || "note",
+          bodyArea: p.bodyArea || p.body_area || "",
+          severity: p.severity == null ? null : p.severity,
+          active: p.active == null ? null : !!p.active,
+          context: p.context || "",
+          text: p.text || "",
+          data: p.data && typeof p.data === "object" ? p.data : {},
+        };
+        return { ...s, athleteEvents: [ ...(s.athleteEvents || []), event ].slice(-500) };
+      });
+    },
+    rememberFact(date, payload) {
+      up((s) => {
+        const p = payload || {};
+        const text = String(p.text || "").trim();
+        if (!text) return s;
+        const key = String(p.key || text.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 80));
+        const facts = [ ...((((s.trainerMemory || {}).facts) || [])) ];
+        const fact = { key, text, date, confidence: p.confidence == null ? null : Number(p.confidence), ts: Date.now() };
+        const idx = facts.findIndex((f) => f.key === key);
+        if (idx >= 0) facts[idx] = { ...facts[idx], ...fact };
+        else facts.push(fact);
+        return { ...s, trainerMemory: { facts: facts.slice(-120) } };
+      });
+    },
+    logExerciseSet(exId, date, payload) {
+      up((s) => {
+        const ex = s.exercises[exId];
+        if (!ex) return s;
+        const p = payload || {};
+        const w = p.weight == null || p.weight === "" ? null : Number(p.weight);
+        const reps = p.reps == null || p.reps === "" ? null : Number(p.reps);
+        const rir = p.rir == null || p.rir === "" ? null : Number(p.rir);
+        const history = [ ...(ex.history || []), {
+          date,
+          w: Number.isFinite(w) ? w : ex.weight,
+          reps: Number.isFinite(reps) ? reps : null,
+          rir: Number.isFinite(rir) ? rir : null,
+          note: p.note || "",
+          source: "coach_set",
+        } ];
+        const learnedWeight = ex.weight == null && Number.isFinite(w) && w > 0 ? w : ex.weight;
+        const updated = { ...ex, weight: learnedWeight, history };
+        const obs = [ ...((s.coachMemory || {}).observations || []) ];
+        if (Number.isFinite(w) || Number.isFinite(reps)) obs.push({ date, text: ex.name + " set: " + (Number.isFinite(w) ? w + " " + ex.unit : "load not stated") + (Number.isFinite(reps) ? " × " + reps : "") + (Number.isFinite(rir) ? " @ RIR ~" + rir : "") });
+        return { ...s, exercises: { ...s.exercises, [exId]: updated }, coachMemory: { observations: obs.slice(-80) } };
       });
     },
     setCoachEndpoint(v) { up((s) => ({ ...s, settings: { ...s.settings, coachEndpoint: v } })); },
@@ -3132,7 +3200,7 @@ function ActiveWorkoutCard({ active, session, actions }) {
         <b>{session ? session.name : active.sessionId}</b>
         <span className="chip active">{active.tier} min plan</span>
       </div>
-      <p className="small dim" style={{ marginTop: 8 }}>Text Coach while you train: “165×5, 2 left”, “machine is taken”, “only 12 minutes left”, “that hurt”, or “this is way too easy”. The trainer can change the remainder without pretending the original plan happened.</p>
+      <p className="small dim" style={{ marginTop: 8 }}>You do not need to text during the workout. Coach is available anytime — before, during, or afterward. If something matters later (pain, soreness, a great set, time pressure), tell it when convenient and it will place the information on the athlete timeline and adapt only when needed.</p>
       <div className="btnrow"><button className="btn subtle sm" onClick={actions.stopActiveWorkout}>End live mode without logging</button></div>
     </div>
   );
@@ -3237,25 +3305,15 @@ function SettingsView({ state, actions }) {
       </div>
 
       <div className="card">
-        <div className="eyebrow"><MessageCircle size={11} style={{ verticalAlign: "-1px" }} /> AI Coach</div>
+        <div className="eyebrow"><MessageCircle size={11} style={{ verticalAlign: "-1px" }} /> Trainer Brain</div>
         <p className="small dim" style={{ marginTop: 6 }}>
-          The chat button is the trainer input: workouts, food, water, recovery, goals, pain, time changes and weekly check-ins can all arrive as normal text. For the deployed app, use one server-side trainer endpoint so no model API key ever lives in the browser.
+          Coach is always available. Message it before, during, or after training — or days later — and useful information is converted into structured athlete events, current state, and durable trainer memory. The model key lives only on the server; never paste an API key into this browser.
         </p>
-        <div className="chips" style={{ marginTop: 12 }}>
-          <button className={"chip" + (state.settings.aiProvider === "claude" ? " active" : "")} onClick={() => actions.setAIProvider("claude")}>Built-in Claude (no key)</button>
-          <button className={"chip" + (state.settings.aiProvider === "openai" ? " active" : "")} onClick={() => actions.setAIProvider("openai")}>My OpenAI key</button>
-        </div>
-        {state.settings.aiProvider === "openai" && (
-          <div style={{ marginTop: 10 }}>
-            <input className="input" type="password" placeholder="sk-..." value={state.settings.openaiKey} onChange={(e) => actions.setOpenAIKey(e.target.value)} />
-            <p className="small faint" style={{ marginTop: 6 }}>Stored locally with the rest of your data, sent only to api.openai.com. Note: browser calls to OpenAI are usually blocked inside Claude.ai — the coach auto-falls back to built-in Claude here and uses your key once self-hosted.</p>
-          </div>
-        )}
         <div className="field" style={{ marginTop: 12 }}>
-          <label>Self-host endpoint (optional)</label>
-          <input className="input" placeholder="https://your-app.vercel.app/api/coach" value={state.settings.coachEndpoint} onChange={(e) => actions.setCoachEndpoint(e.target.value)} />
+          <label>Trainer endpoint</label>
+          <input className="input" placeholder="/api/trainer" value={state.settings.coachEndpoint || "/api/trainer"} onChange={(e) => actions.setCoachEndpoint(e.target.value)} />
         </div>
-        <p className="small faint" style={{ marginTop: 6 }}>When you deploy this outside Claude, point this at a tiny server route that holds your API key (never put keys in browser code — a proxy recipe is commented in the source next to coachTurn). Chain: your endpoint → your OpenAI key → built-in Claude.</p>
+        <p className="small faint" style={{ marginTop: 6 }}>Default: /api/trainer. On deployment, set OPENAI_API_KEY as a server environment variable. Conversation history remains part of app state; PR3 will move athlete memory to a cloud database for cross-device sync.</p>
         <div className="btnrow">
           <button className="btn subtle sm" onClick={actions.clearChat}>Clear chat history</button>
         </div>
@@ -3376,40 +3434,25 @@ async function claudeCall(sys, msgs) {
 
 async function coachTurn(state, plan, today, userText) {
   const sys = buildCoachSystem(state, plan, today);
-  const history = state.chat.slice(-8).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
+  const history = state.chat.slice(-12).map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
   const msgs = [...history, { role: "user", content: userText }];
-  if (state.settings.coachEndpoint) {
-    try {
-      const r = await fetch(state.settings.coachEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, system: sys, messages: msgs }),
-      });
-      if (!r.ok) throw new Error("proxy " + r.status);
-      const d = await r.json();
-      const text = Array.isArray(d.content)
-        ? d.content.map((b) => (b.type === "text" ? b.text : "")).filter(Boolean).join("\n")
-        : (typeof d.text === "string" ? d.text : "");
-      if (text) return parseCoachReply(text);
-      throw new Error("proxy empty");
-    } catch (e) { /* fall through to the next provider */ }
+  const endpoint = state.settings.coachEndpoint || "/api/trainer";
+  const r = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ system: sys, messages: msgs }),
+  });
+  if (!r.ok) {
+    let detail = "trainer " + r.status;
+    try { const d = await r.json(); if (d && d.error) detail = d.error; } catch (e) {}
+    throw new Error(detail);
   }
-  if (state.settings.aiProvider === "openai" && state.settings.openaiKey) {
-    try {
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + state.settings.openaiKey },
-        body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: 600, messages: [{ role: "system", content: sys }].concat(msgs) }),
-      });
-      if (!r.ok) throw new Error("openai " + r.status);
-      const d = await r.json();
-      return parseCoachReply(d.choices && d.choices[0] && d.choices[0].message ? d.choices[0].message.content : "");
-    } catch (e) {
-      const res = await claudeCall(sys, msgs);
-      return { reply: "(OpenAI is unreachable from this environment, so the built-in coach answered. Your key kicks in automatically once self-hosted.)\n\n" + res.reply, actions: res.actions };
-    }
-  }
-  return claudeCall(sys, msgs);
+  const d = await r.json();
+  const text = Array.isArray(d.content)
+    ? d.content.map((b) => (b.type === "text" ? b.text : "")).filter(Boolean).join("\n")
+    : (typeof d.text === "string" ? d.text : "");
+  if (!text) throw new Error("trainer returned no text");
+  return parseCoachReply(text);
 }
 
 function findExerciseByName(exercises, name) {
@@ -3430,7 +3473,7 @@ function runCoachActions(list, ctx) {
   const { state, actions, plan, today } = ctx;
   const out = [];
   const dayOf = (date) => plan.days.find((d) => d.date === date);
-  (list || []).slice(0, 6).forEach((a) => {
+  (list || []).slice(0, 8).forEach((a) => {
     if (!a || typeof a.type !== "string") return;
     const date = a.date && /^\d{4}-\d{2}-\d{2}$/.test(a.date) ? a.date : today;
     try {
@@ -3476,6 +3519,26 @@ function runCoachActions(list, ctx) {
       } else if (a.type === "move_session") {
         if (PRIORITY.indexOf(a.slot) >= 0 && a.to_date && /^\d{4}-\d{2}-\d{2}$/.test(a.to_date)) { actions.pinSession(a.to_date, a.slot); out.push("✓ " + a.slot + " pinned to " + fmtShort(a.to_date)); }
         else out.push("• couldn't parse that move");
+      } else if (a.type === "log_event") {
+        actions.logAthleteEvent(date, {
+          event_type: a.event_type || "note",
+          occurred_at: a.occurred_at || a.date || date,
+          body_area: a.body_area || "",
+          severity: a.severity,
+          active: a.active,
+          context: a.context || "",
+          text: a.text || "",
+          data: a.data,
+        });
+        out.push("✓ " + (a.event_type || "event") + " saved to athlete timeline");
+      } else if (a.type === "remember_fact") {
+        if (a.text) { actions.rememberFact(date, a); out.push("✓ trainer memory updated"); }
+      } else if (a.type === "log_set") {
+        const hit = findExerciseByName(state.exercises, a.name);
+        if (hit) {
+          actions.logExerciseSet(hit[0], date, { weight: a.weight, reps: a.reps, rir: a.rir, note: a.note || "" });
+          out.push("✓ " + hit[1].name + " set saved");
+        } else out.push("• couldn't find an exercise named " + a.name);
       } else if (a.type === "log_bench") {
         const w = Number(a.weight);
         const reps = Array.isArray(a.reps) ? a.reps.map(Number).filter((n) => Number.isFinite(n)) : null;
@@ -3552,7 +3615,7 @@ function CoachDrawer({ open, onClose, state, actions, plan, today }) {
     }
     setBusy(false);
   };
-  const quick = ["I finished today's workout", "I only did 15 minutes", "That was too hard — adjust my week", "That was too easy", "I drank 24 oz", "Weekly check-in"];
+  const quick = ["How am I doing?", "159.2 this morning", "Slept badly last night", "My knee started hurting later", "I can't train tomorrow", "Had chicken, rice + a shake"];
   return (
     <div className="drawer">
       <div className="drawer-head">
@@ -3566,7 +3629,7 @@ function CoachDrawer({ open, onClose, state, actions, plan, today }) {
       <div className="drawer-msgs" ref={scrollRef}>
         {state.chat.length === 0 && (
           <div className="bub coach">
-            Talk to me like a training partner:{"\n"}· "only did bench + pull-ups — 15 minutes"{"\n"}· "that was brutal; hamstrings are cooked, adjust my week"{"\n"}· "30 lb curls were way too easy"{"\n"}· "RDL hurt, remove it from the rest of today"{"\n"}· "ate chicken, rice + a shake"{"\n"}· "drank 24 oz"{"\n"}· "159.2 this morning; waist 31.5; felt strong this week"
+            Message me whenever you want — morning, afternoon, before or after training, on a rest day, or days later:{"\n"}· "only did bench + pull-ups — 15 minutes"{"\n"}· "that was brutal; hamstrings are cooked, adjust my week"{"\n"}· "30 lb curls were way too easy"{"\n"}· "RDL hurt, remove it from the rest of today"{"\n"}· "ate chicken, rice + a shake"{"\n"}· "drank 24 oz"{"\n"}· "159.2 this morning; waist 31.5; felt strong this week"
           </div>
         )}
         {state.chat.map((m, i) => (
@@ -3597,7 +3660,7 @@ function CoachDrawer({ open, onClose, state, actions, plan, today }) {
 function OnboardingWizard({ actions }) {
   const [step, setStep] = useState(0);
   const [bw, setBw] = useState("");
-  const [bench, setBench] = useState("145");
+  const [bench, setBench] = useState("");
   const [mins, setMins] = useState({ 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 75, 6: 60 });
   const [remOn, setRemOn] = useState(true);
   const [remTime, setRemTime] = useState("07:00");
