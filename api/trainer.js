@@ -1,3 +1,5 @@
+import { loadTrainerContext, persistTrainerTurn } from "./_db.js";
+
 const MAX_SYSTEM_CHARS = 32000;
 const MAX_MESSAGE_CHARS = 6000;
 const MAX_HISTORY = 12;
@@ -50,9 +52,14 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(String(body.today || "")) ? String(body.today) : new Date().toISOString().slice(0, 10);
+  const athleteKey = String(body.athleteKey || process.env.TRAINER_ATHLETE_KEY || "local-demo").slice(0, 120);
+
   if (!process.env.OPENAI_API_KEY) {
     return res.status(200).json({
       configured: false,
+      db: { configured: Boolean(process.env.DATABASE_URL), loaded: false },
       text: JSON.stringify({
         reply: "The trainer brain is installed, but the server still needs its OPENAI_API_KEY environment variable. Nothing from this message was logged.",
         actions: [],
@@ -60,7 +67,6 @@ export default async function handler(req, res) {
     });
   }
 
-  const body = req.body && typeof req.body === "object" ? req.body : {};
   const system = String(body.system || "").slice(0, MAX_SYSTEM_CHARS);
   const messages = safeMessages(body.messages);
   if (!messages.length) {
@@ -84,6 +90,8 @@ Never invent completed training, food, sleep, pain severity, or measurements. If
 Reply like a real trainer: conversational and concise. If you stored or changed something, say what you understood in normal language. Do not expose internal action names. Output only the JSON contract requested by the app.`;
 
   try {
+    const dbContext = await loadTrainerContext({ athleteKey });
+    const model = process.env.OPENAI_MODEL || "gpt-5.6";
     const apiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -91,8 +99,8 @@ Reply like a real trainer: conversational and concise. If you stored or changed 
         "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.6",
-        instructions: `${system}\n\n${alwaysOnContract}`,
+        model,
+        instructions: `${system}\n\n${alwaysOnContract}${dbContext.prompt ? "\n\n" + dbContext.prompt : ""}`,
         input: messages,
         max_output_tokens: 1400,
         store: false,
@@ -106,7 +114,27 @@ Reply like a real trainer: conversational and concise. If you stored or changed 
     }
 
     const turn = normalizeTrainerTurn(extractResponseText(data));
-    return res.status(200).json({ configured: true, text: JSON.stringify(turn) });
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    const saved = await persistTrainerTurn({
+      athleteKey,
+      today,
+      userText: lastUser ? lastUser.content : "",
+      assistantReply: turn.reply,
+      actions: turn.actions,
+      model,
+      dbContext: { loaded: !!dbContext.loaded, counts: dbContext.counts || null, error: dbContext.error || null },
+    });
+    return res.status(200).json({
+      configured: true,
+      db: {
+        configured: !!dbContext.configured,
+        loaded: !!dbContext.loaded,
+        saved: !!saved.saved,
+        actionsSaved: saved.actionsSaved || 0,
+        error: dbContext.error || saved.error || null,
+      },
+      text: JSON.stringify(turn),
+    });
   } catch (error) {
     return res.status(502).json({ error: error instanceof Error ? error.message : "Trainer service unavailable" });
   }

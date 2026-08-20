@@ -4,15 +4,20 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "predev": "python scripts/pr5_goal_driven_scheduler.py",
-    "dev": "vite",
-    "prebuild": "python scripts/pr5_goal_driven_scheduler.py",
+    "dev": "node server.js",
+    "dev:vite": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "migrate": "node scripts/migrate.mjs",
+    "preview": "vite preview",
+    "start": "NODE_ENV=production node server.js",
+    "test:pr5": "node scripts/pr5_scenario_tests.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "lucide-react": "latest",
+    "pg": "^8.23.0",
     "react": "latest",
     "react-dom": "latest",
     "recharts": "latest",
