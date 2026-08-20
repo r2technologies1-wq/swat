@@ -470,6 +470,12 @@ const SESSIONS = {
     desc: "Morning bodyweight + waist first. Then: controlled bench baseline (crisp set of 5, 2–3 in reserve), strict pull-up max, push-up max, explosive pull-up height.",
     contrib: {}, stress: { push: 3, pull: 2, lower: 0, run: 0, hard: true, bench: true },
     minMinutes: 25,
+    variants: { 60: [
+      ["benchA", "Build to 1 crisp × 5", "Ramp gradually · stop with ~2–3 reps in reserve · NOT a max"],
+      ["pullup", "1 max clean set", "Strict dead hang → chin over bar · stop when form breaks"],
+      ["pushup", "1 max clean set", "Standardize technique · stop at technical failure"],
+      ["exPull", "3 × 2 explosive reps", "Full rest · record best height / landmark"],
+    ] },
     calKeys: ["bodyweight", "waist", "benchBaseline", "pullupMax", "pushupMax", "exPullHeight"],
   },
   CAL_LOW: {
@@ -478,6 +484,14 @@ const SESSIONS = {
     desc: "Find Stage-1 working weights at 2–3 reps in reserve: RDL, hip thrust, hamstring curl, calf raise, tibialis. Check step-up tolerance. Optional broad jump only if fully pain-free.",
     contrib: {}, stress: { push: 0, pull: 0, lower: 3, run: 0, hard: true },
     minMinutes: 25,
+    variants: { 60: [
+      ["rdl", "2–3 calibration sets", "Find a clean working load with ~2–3 reps in reserve"],
+      ["hipThrust", "2–3 calibration sets", "Find a clean working load with ~2–3 reps in reserve"],
+      ["hamCurl", "2 × 10–12", "Stop with ~2–3 reps in reserve"],
+      ["calfRaise", "2 × 12–15", "Controlled reps · 2–3 reps in reserve"],
+      ["tibRaise", "2 × 15–20", "Controlled reps"],
+      ["stepUp", "2 easy test sets", "Pain-free tolerance check only · do not force it"],
+    ] },
     calKeys: ["rdl", "hipThrust", "hamCurl", "calfRaise", "tibRaise", "stepUp", "broadJump"],
   },
   CAL_TRACK: {
@@ -486,6 +500,9 @@ const SESSIONS = {
     desc: "Measure the mezzanine track: laps per mile and usable straight length. Then 30–40 min easy with 2–3 relaxed strides on the straight.",
     contrib: { easyRun: 1 }, stress: { push: 0, pull: 0, lower: 1, run: 1, hard: false },
     minMinutes: 30,
+    variants: { 60: [
+      ["easyAerobic20", "30–40 min easy", "First measure laps per mile + usable straight · finish with 2–3 relaxed strides"],
+    ] },
     calKeys: ["trackLaps", "trackStraight"],
   },
   CAL_ACCA: {
@@ -494,6 +511,13 @@ const SESSIONS = {
     desc: "Calibrate row, incline DB press, lateral raise, hammer curl, pressdown. Conservative load, low end of the rep range, 2–3 clean reps in reserve.",
     contrib: { biceps: 1, triceps: 1 }, stress: { push: 2, pull: 2, lower: 0, run: 0, hard: true },
     minMinutes: 25,
+    variants: { 60: [
+      ["csRow", "2 × 8–10", "Conservative load · 2–3 reps in reserve"],
+      ["inclineDb", "2 × 8–10", "Conservative load · 2–3 reps in reserve"],
+      ["latRaise", "2 × 12–15", "Smooth reps · no grinding"],
+      ["hammer", "2 × 10–12", "2–3 reps in reserve"],
+      ["pressdown", "2 × 10–12", "2–3 reps in reserve"],
+    ] },
     calKeys: ["csRow", "inclineDb", "latRaise", "hammer", "pressdown"],
   },
   CAL_ACCC: {
@@ -502,6 +526,15 @@ const SESSIONS = {
     desc: "Calibrate pulldown, 1-arm row, DB overhead press, incline curl, overhead triceps, face pull. Finish with 2–3 band-assisted muscle-up transition trials — skill, not failure.",
     contrib: { explosivePull: 1, biceps: 1, triceps: 1 }, stress: { push: 2, pull: 3, lower: 0, run: 0, hard: true },
     minMinutes: 25,
+    variants: { 60: [
+      ["pulldown", "2 × 8–10", "Conservative load · 2–3 reps in reserve"],
+      ["cableRow1", "2 × 10/side", "Controlled · 2–3 reps in reserve"],
+      ["ohp", "2 × 8–10", "2–3 reps in reserve"],
+      ["incCurl", "2 × 10–12", "2–3 reps in reserve"],
+      ["ohTri", "2 × 10–12", "2–3 reps in reserve"],
+      ["facePull", "2 × 12–15", "Controlled"],
+      ["muTrans", "2–3 × 3", "Band-assisted transition trials · skill, not failure"],
+    ] },
     calKeys: ["pulldown", "cableRow1", "ohp", "incCurl", "ohTri", "facePull"],
   },
   PREP: {
@@ -2006,6 +2039,7 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 .mhead{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
 .mhead div{padding:0 4px}
 .mrow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:6px}
+.monthgrid{overflow-x:auto;padding-bottom:6px}
 .mcell{appearance:none;font-family:inherit;text-align:left;border:1px solid var(--line);border-radius:8px;background:var(--panel2);min-height:64px;padding:6px 7px;cursor:pointer;display:flex;flex-direction:column;gap:2px;color:var(--text)}
 .mcell:hover{border-color:var(--accent2)}
 .mcell.today{border-color:var(--accent2);box-shadow:0 0 0 1px var(--accent2) inset}
@@ -2037,6 +2071,9 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 @media (max-width:840px){
   .ptable{grid-template-columns:1.3fr 0.9fr 0.6fr;font-size:12px}
   .ptable div:nth-child(4){display:none}
+}
+@media (max-width:480px){
+  .monthgrid .mhead,.monthgrid .mrow{min-width:560px}
 }
 @media (max-width:840px){
   .drawer{width:100vw}
@@ -2147,6 +2184,149 @@ function TriToggle({ value, onChange }) {
   );
 }
 
+function CombineCapturePanel({ session, state, actions, today }) {
+  const cal = (state.calibration && state.calibration.values) || {};
+  const exW = (id) => state.exercises[id] && state.exercises[id].weight != null ? String(state.exercises[id].weight) : "";
+  const [f, setF] = useState(() => ({
+    bodyweight: cal.bodyweight || "", waist: cal.waist || "",
+    benchWeight: exW("benchA"), benchReps: "5", benchRir: "2",
+    pullupMax: cal.pullupMax || "", pushupMax: cal.pushupMax || "", exPullHeight: cal.exPullHeight || "",
+    rdlWeight: exW("rdl"), rdlReps: "", rdlRir: "2",
+    hipThrustWeight: exW("hipThrust"), hipThrustReps: "", hipThrustRir: "2",
+    hamCurlWeight: exW("hamCurl"), hamCurlReps: "", hamCurlRir: "2",
+    calfRaiseWeight: exW("calfRaise"), calfRaiseReps: "", calfRaiseRir: "2",
+    tibRaiseWeight: exW("tibRaise"), tibRaiseReps: "", tibRaiseRir: "2",
+    stepUpWeight: exW("stepUp"), stepUpReps: "", stepUpRir: "",
+    broadJump: cal.broadJump || "",
+    trackLaps: cal.trackLaps || "", trackStraight: cal.trackStraight || "", easyMinutes: "35",
+    csRowWeight: exW("csRow"), csRowReps: "", csRowRir: "2",
+    inclineDbWeight: exW("inclineDb"), inclineDbReps: "", inclineDbRir: "2",
+    latRaiseWeight: exW("latRaise"), latRaiseReps: "", latRaiseRir: "2",
+    hammerWeight: exW("hammer"), hammerReps: "", hammerRir: "2",
+    pressdownWeight: exW("pressdown"), pressdownReps: "", pressdownRir: "2",
+    pulldownWeight: exW("pulldown"), pulldownReps: "", pulldownRir: "2",
+    cableRow1Weight: exW("cableRow1"), cableRow1Reps: "", cableRow1Rir: "2",
+    ohpWeight: exW("ohp"), ohpReps: "", ohpRir: "2",
+    incCurlWeight: exW("incCurl"), incCurlReps: "", incCurlRir: "2",
+    ohTriWeight: exW("ohTri"), ohTriReps: "", ohTriRir: "2",
+    facePullWeight: exW("facePull"), facePullReps: "", facePullRir: "2",
+    muBand: "", note: "",
+  }));
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const num = (k) => { const raw = String(f[k] == null ? "" : f[k]).trim(); if (!raw) return null; const n = Number(raw); return Number.isFinite(n) ? n : null; };
+  const input = (key, label, unit, placeholder) => (
+    <div className="field" style={{ minWidth: 105, flex: "1 1 105px" }}>
+      <label>{label}</label>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <input className="input" value={f[key]} placeholder={placeholder || ""} onChange={(e) => set(key, e.target.value)} />
+        {unit && <span className="small faint" style={{ whiteSpace: "nowrap" }}>{unit}</span>}
+      </div>
+    </div>
+  );
+  const step = (n, title, rx, why, fields) => (
+    <div key={n} style={{ border: "1px solid var(--line2)", borderRadius: 12, padding: 14, background: "var(--panel2)" }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <div className="num" style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent)", color: "#08101d", fontWeight: 800, flex: "0 0 auto" }}>{n}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>
+          <div className="num" style={{ color: "var(--ice)", marginTop: 3, fontSize: 14 }}>{rx}</div>
+          <p className="small dim" style={{ marginTop: 5 }}>{why}</p>
+          {fields && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 11 }}>{fields}</div>}
+        </div>
+      </div>
+    </div>
+  );
+  const weighted = (n, id, rx, why, prefix) => step(n, state.exercises[id].name, rx, why, [
+    input(prefix + "Weight", "Record weight", "lb"), input(prefix + "Reps", "Record reps", "reps"), input(prefix + "Rir", "Reps left", "RIR")
+  ]);
+  const saveWeighted = (id, prefix) => {
+    const w = num(prefix + "Weight"), reps = num(prefix + "Reps"), rir = num(prefix + "Rir");
+    if (w != null) { actions.setExerciseWeight(id, w); actions.saveCalValue(id, String(w)); }
+    if (w != null || reps != null || rir != null) actions.logExerciseSet(id, today, { weight: w, reps, rir, note: "Combine calibration" });
+  };
+  let rows = [];
+  if (session.id === "CAL_UP") rows = [
+    step(1, "Morning measurements", "Bodyweight + waist", "Capture the starting point before training. Same conditions make future comparisons useful.", [input("bodyweight", "Bodyweight", "lb"), input("waist", "Waist at navel", "in")]),
+    step(2, "Barbell bench press", "Build to 1 crisp × 5", "Ramp up gradually. Stop with about 2–3 clean reps still available. This is a baseline, not a max.", [input("benchWeight", "Record weight", "lb"), input("benchReps", "Record reps", "reps"), input("benchRir", "Reps left", "RIR")]),
+    step(3, "Strict pull-ups", "1 max clean set", "Dead hang to chin over bar. Stop when the next rep would lose the standard.", [input("pullupMax", "Record max", "reps")]),
+    step(4, "Push-ups", "1 max clean set", "Use one consistent technique and stop at technical failure.", [input("pushupMax", "Record max", "reps")]),
+    step(5, "Explosive pull-ups", "3 × 2 · full rest", "Pull as high as possible while fresh. We care about your best repeatable landmark, not fatigue reps.", [input("exPullHeight", "Best height / landmark", "", "e.g. lower chest to bar")]),
+  ];
+  if (session.id === "CAL_LOW") rows = [
+    weighted(1, "rdl", "2–3 calibration sets", "Find the load that leaves about 2–3 clean reps in reserve.", "rdl"),
+    weighted(2, "hipThrust", "2–3 calibration sets", "Find a clean repeatable working weight, not a grinder.", "hipThrust"),
+    weighted(3, "hamCurl", "2 × 10–12", "Stop with 2–3 reps available.", "hamCurl"),
+    weighted(4, "calfRaise", "2 × 12–15", "Controlled full-range reps.", "calfRaise"),
+    weighted(5, "tibRaise", "2 × 15–20", "Controlled reps; establish a repeatable setup.", "tibRaise"),
+    weighted(6, "stepUp", "2 easy test sets", "Tolerance check only. If the knee objects, stop and record it rather than forcing the test.", "stepUp"),
+    step(7, "Broad jump · optional", "Only if fully pain-free", "One or two quality measurements are enough. Skip it if the knee is uncertain.", [input("broadJump", "Best distance", "in")]),
+  ];
+  if (session.id === "CAL_TRACK") rows = [
+    step(1, "Measure the track", "Laps per mile + usable straight", "This lets later speed work use the space accurately instead of guessing.", [input("trackLaps", "Laps per mile", "laps"), input("trackStraight", "Straight length", "yd")]),
+    step(2, "Easy aerobic run", "30–40 min conversational", "Keep it truly easy. Finish with 2–3 relaxed strides on the straight if everything feels normal.", [input("easyMinutes", "Actual minutes", "min")]),
+  ];
+  if (session.id === "CAL_ACCA") rows = [
+    weighted(1, "csRow", "2 × 8–10", "Find a conservative working load with 2–3 reps in reserve.", "csRow"),
+    weighted(2, "inclineDb", "2 × 8–10", "Clean reps; leave 2–3 in reserve.", "inclineDb"),
+    weighted(3, "latRaise", "2 × 12–15", "Smooth reps with no swinging or grinding.", "latRaise"),
+    weighted(4, "hammer", "2 × 10–12", "Find a repeatable starting load.", "hammer"),
+    weighted(5, "pressdown", "2 × 10–12", "Find a repeatable starting load.", "pressdown"),
+  ];
+  if (session.id === "CAL_ACCC") rows = [
+    weighted(1, "pulldown", "2 × 8–10", "Conservative load with 2–3 reps in reserve.", "pulldown"),
+    weighted(2, "cableRow1", "2 × 10 / side", "Controlled and symmetrical.", "cableRow1"),
+    weighted(3, "ohp", "2 × 8–10", "Find a clean starting load without grinding.", "ohp"),
+    weighted(4, "incCurl", "2 × 10–12", "Repeatable starting load.", "incCurl"),
+    weighted(5, "ohTri", "2 × 10–12", "Repeatable starting load.", "ohTri"),
+    weighted(6, "facePull", "2 × 12–15", "Controlled shoulder-friendly reps.", "facePull"),
+    step(7, "Muscle-up transition trial", "2–3 × 3 band-assisted", "Skill test only. Record which band/setup lets you move cleanly; do not turn this into failure work.", [input("muBand", "Band / setup", "", "e.g. medium band")]),
+  ];
+
+  const save = () => {
+    if (session.id === "CAL_UP") {
+      if (num("bodyweight") != null) { actions.saveCalValue("bodyweight", f.bodyweight); actions.logMetric("bodyweight", num("bodyweight"), today); }
+      if (num("waist") != null) { actions.saveCalValue("waist", f.waist); actions.logMetric("waist", num("waist"), today); }
+      const bw = num("benchWeight"), br = num("benchReps"), rir = num("benchRir");
+      if (bw != null) { actions.setExerciseWeight("benchA", bw); actions.saveCalValue("benchBaseline", bw + " × " + (br == null ? 5 : br)); }
+      if (bw != null || br != null || rir != null) actions.logExerciseSet("benchA", today, { weight: bw, reps: br, rir, note: "Combine upper baseline" });
+      if (num("pullupMax") != null) { actions.saveCalValue("pullupMax", f.pullupMax); actions.logMetric("pullup", num("pullupMax"), today); }
+      if (num("pushupMax") != null) actions.saveCalValue("pushupMax", f.pushupMax);
+      if (String(f.exPullHeight).trim()) actions.saveCalValue("exPullHeight", f.exPullHeight);
+    }
+    if (session.id === "CAL_LOW") {
+      [["rdl","rdl"],["hipThrust","hipThrust"],["hamCurl","hamCurl"],["calfRaise","calfRaise"],["tibRaise","tibRaise"],["stepUp","stepUp"]].forEach(([id,prefix]) => saveWeighted(id,prefix));
+      if (num("broadJump") != null) actions.saveCalValue("broadJump", f.broadJump);
+    }
+    if (session.id === "CAL_TRACK") {
+      if (num("trackLaps") != null) actions.saveCalValue("trackLaps", f.trackLaps);
+      if (num("trackStraight") != null) actions.saveCalValue("trackStraight", f.trackStraight);
+    }
+    if (session.id === "CAL_ACCA") [["csRow","csRow"],["inclineDb","inclineDb"],["latRaise","latRaise"],["hammer","hammer"],["pressdown","pressdown"]].forEach(([id,prefix]) => saveWeighted(id,prefix));
+    if (session.id === "CAL_ACCC") [["pulldown","pulldown"],["cableRow1","cableRow1"],["ohp","ohp"],["incCurl","incCurl"],["ohTri","ohTri"],["facePull","facePull"]].forEach(([id,prefix]) => saveWeighted(id,prefix));
+    const exerciseIds = (session.variants && session.variants[60] ? session.variants[60].map((r) => r[0]) : []);
+    actions.completeSession(today, session.id, { status: "completed", feel: "Appropriate", note: f.note || "Combine baseline captured", duration: session.id === "CAL_TRACK" ? (num("easyMinutes") || 35) : 45, exercisesCompleted: exerciseIds, exercisesSkipped: [], data: { combine: { ...f } } });
+  };
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <div>
+          <div className="eyebrow" style={{ color: "var(--accent)", fontSize: 12 }}>TODAY'S WORKOUT · STARTING POINT</div>
+          <h2 className="sec" style={{ marginTop: 4 }}>Do the steps. Record the result.</h2>
+        </div>
+        <span className="badge">COMBINE {session.id === "CAL_UP" ? "1" : session.id === "CAL_LOW" ? "2" : session.id === "CAL_TRACK" ? "3" : session.id === "CAL_ACCA" ? "4" : "5"}</span>
+      </div>
+      <p className="small dim" style={{ marginTop: 7 }}>This is calibration, not a competition. We are establishing the numbers the trainer will use to prescribe September.</p>
+      <div style={{ display: "grid", gap: 10, marginTop: 14 }}>{rows}</div>
+      <div style={{ marginTop: 14 }}>
+        <input className="input" value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="Anything worth remembering? pain, setup, technique, equipment, etc." />
+      </div>
+      <div className="btnrow" style={{ marginTop: 12 }}>
+        <button className="btn good" onClick={save}><Check size={15} /> Save Combine Results</button>
+      </div>
+    </div>
+  );
+}
+
 function WorkoutPanel({ session, tier, state, actions, today, onDone, autoOverride }) {
   const override = mergeDayOverrides(autoOverride, (state.dayWorkoutOverrides || {})[today]);
   const effectiveTier = override.tier || tier;
@@ -2155,7 +2335,7 @@ function WorkoutPanel({ session, tier, state, actions, today, onDone, autoOverri
   const [feel, setFeel] = useState(null);
   const [markers, setMarkers] = useState({});
   const [doneMap, setDoneMap] = useState({});
-  const [benchW, setBenchW] = useState(state.exercises.benchA.weight || 145);
+  const [benchW, setBenchW] = useState(state.exercises.benchA.weight == null ? "" : state.exercises.benchA.weight);
   const [benchReps, setBenchReps] = useState(["", "", "", ""]);
   const [pullups, setPullups] = useState("");
   const [note, setNote] = useState("");
@@ -2310,15 +2490,13 @@ function TodayView({ state, actions, plan, today, setTab }) {
 
   return (
     <div>
-      <HelpCard state={state} actions={actions} />
       {state.activeWorkout && state.activeWorkout.date === today && (
         <ActiveWorkoutCard active={state.activeWorkout} session={SESSIONS[state.activeWorkout.sessionId]} actions={actions} />
       )}
-      <WeeklyCheckinCard state={state} actions={actions} today={today} />
-      <div className="card">
+      <div className="card" style={{ borderColor: "var(--accent2)" }}>
         <div className="scorehead">
           <div>
-            <div className="eyebrow">{fmtLong(today)} · {PHASES[phase].chip}</div>
+            <div className="eyebrow" style={{ color: "var(--accent)" }}>TODAY'S WORKOUT · {fmtLong(today)} · {PHASES[phase].chip}</div>
             <h1 className="big">
               {completed ? (partial ? "Partially banked: " : "Banked: ") + session.short + (partial ? "" : " ✓")
                 : session ? session.name
@@ -2337,13 +2515,12 @@ function TodayView({ state, actions, plan, today, setTab }) {
         {!completed && session && (
           <div style={{ marginTop: 8 }}>
             <p className="dim" style={{ fontSize: 13.5 }}>{session.desc}</p>
-            <div style={{ marginTop: 10 }}>
-              <div className="eyebrow">Why this, today</div>
-              {dayPlan.reasons.map((r, i) => (<div className="reason" key={i}>{r}</div>))}
-              {dayPlan.pinned && <div className="reason">Pinned here by you.</div>}
-            </div>
+            <Collapse title="Why the trainer chose this today">
+              {dayPlan.reasons.length ? dayPlan.reasons.map((r, i) => (<p key={i} style={{ marginTop: i ? 5 : 0 }}>{r}</p>)) : <p>This is the highest-priority safe session for the current block.</p>}
+              {dayPlan.pinned && <p style={{ marginTop: 5 }}>Pinned here by you.</p>}
+            </Collapse>
 
-            {(session.variants || (mergedOverride.add && mergedOverride.add.length)) && (
+            {!isCal && (session.variants || (mergedOverride.add && mergedOverride.add.length)) && (
               <div style={{ marginTop: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                   <div className="eyebrow"><Clock size={11} style={{ verticalAlign: "-1px" }} /> Time available</div>
@@ -2372,14 +2549,8 @@ function TodayView({ state, actions, plan, today, setTab }) {
               </div>
             )}
 
-            {isCal && (
-              <div style={{ marginTop: 14 }}>
-                <div className="eyebrow">Calibration rule</div>
-                <p className="small dim" style={{ marginTop: 6 }}>{CAL_RULE}</p>
-                <div className="btnrow">
-                  <button className="btn sm" onClick={() => setTab("SETTINGS")}><Target size={14} /> Open Calibration & Baselines</button>
-                </div>
-              </div>
+            {isCal && !completed && (
+              <CombineCapturePanel key={session.id} session={session} state={state} actions={actions} today={today} />
             )}
 
             {showCB && (
@@ -2391,7 +2562,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
                 </Collapse>
               </div>
             )}
-            {!panelOpen && (
+            {!isCal && !panelOpen && (
               <div className="btnrow">
                 <button className="btn primary" onClick={() => { actions.startWorkout(today, session.id, tier); setPanelOpen(true); }}><Zap size={15} /> Start Workout</button>
                 <button className="btn" onClick={() => setPanelOpen(true)}><Check size={15} /> Complete Workout</button>
@@ -2401,7 +2572,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
                 <button className="btn subtle" onClick={() => setMoveOpen(true)}>Move / Reschedule</button>
               </div>
             )}
-            {!panelOpen && (
+            {!isCal && !panelOpen && (
               <div className="btnrow" style={{ marginTop: 8 }}>
                 <button className="btn warn sm" onClick={() => actions.setKnee("irritated")}><AlertTriangle size={13} /> Knee Doesn't Feel Good</button>
                 <button className="btn subtle sm" onClick={() => actions.flagExhausted(today)}><Moon size={13} /> I'm Exhausted</button>
@@ -2429,9 +2600,12 @@ function TodayView({ state, actions, plan, today, setTab }) {
         )}
       </div>
 
-      {panelOpen && session && (
+      {panelOpen && session && !isCal && (
         <WorkoutPanel session={session} tier={tier} state={state} actions={actions} today={today} autoOverride={dayPlan.autoOverride} onDone={() => setPanelOpen(false)} />
       )}
+
+      <WeeklyCheckinCard state={state} actions={actions} today={today} />
+      <HelpCard state={state} actions={actions} />
 
       <div className="grid2">
         <div className="card">
@@ -2598,32 +2772,34 @@ function MonthView({ state, today, anchor, setAnchor, onDay }) {
   };
   return (
     <div style={{ marginTop: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <button className="btn subtle sm" onClick={() => shift(-1)}><ChevronLeft size={14} /></button>
         <div style={{ fontWeight: 750, minWidth: 150, textAlign: "center" }}>{label}</div>
         <button className="btn subtle sm" onClick={() => shift(1)}><ChevronRight size={14} /></button>
         <span className="small faint" style={{ marginLeft: "auto" }}>Tap a day for the full session</span>
       </div>
-      <div className="mhead">
-        {DOW_SHORT.map((d) => (<div key={d}>{d}</div>))}
-      </div>
-      {weeks.map((ws) => (
-        <div className="mrow" key={ws}>
-          {plans[ws].days.map((d) => {
-            const inMonth = d.date.slice(0, 7) === anchor;
-            const s = d.id ? SESSIONS[d.id] : null;
-            return (
-              <button key={d.date}
-                className={"mcell" + (d.date === today ? " today" : "") + ((d.status === "completed" || d.status === "partial") ? " completed" : "") + (inMonth ? "" : " out")}
-                onClick={() => onDay(d, plans[ws])}>
-                <span className="mdate num">{parseInt(d.date.slice(8), 10)}</span>
-                <span className="mname">{s ? s.short : ""}</span>
-                <span className="mic">{statusIcon(d.status, d.id)}</span>
-              </button>
-            );
-          })}
+      <div className="monthgrid">
+        <div className="mhead">
+          {DOW_SHORT.map((d) => (<div key={d}>{d}</div>))}
         </div>
-      ))}
+        {weeks.map((ws) => (
+          <div className="mrow" key={ws}>
+            {plans[ws].days.map((d) => {
+              const inMonth = d.date.slice(0, 7) === anchor;
+              const s = d.id ? SESSIONS[d.id] : null;
+              return (
+                <button key={d.date}
+                  className={"mcell" + (d.date === today ? " today" : "") + ((d.status === "completed" || d.status === "partial") ? " completed" : "") + (inMonth ? "" : " out")}
+                  onClick={() => onDay(d, plans[ws])}>
+                  <span className="mdate num">{parseInt(d.date.slice(8), 10)}</span>
+                  <span className="mname">{s ? s.short : ""}</span>
+                  <span className="mic">{statusIcon(d.status, d.id)}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2897,27 +3073,31 @@ function RoadmapView({ state, actions, plan, today, setTab }) {
       <div className="card">
         <div className="eyebrow">North star · Dec 31 targets</div>
         <h1 className="big">Faster. Stronger. Leaner. More durable.</h1>
-        <p className="small dim" style={{ marginTop: 8 }}>Judged by weekly accumulation and monthly progress — never by perfect daily streaks. Every bar below moves because of weeks like the one embedded further down.</p>
+        <p className="small dim" style={{ marginTop: 8 }}>Judged by weekly accumulation and monthly progress — never by perfect daily streaks. The calendar below turns these targets into this week's work.</p>
         <div style={{ marginTop: 14 }}>
           {GOALS.map((g) => (<GoalRow g={g} snap={snap} ov={state.goalOverrides} key={g.key} />))}
         </div>
       </div>
 
       <div className="card">
-        <div className="eyebrow">Sep 1 – Dec 31 · four blocks, one week at a time</div>
+        <div className="eyebrow">Training calendar · week and month</div>
+        <h2 className="sec">Your schedule</h2>
+        <p className="small dim" style={{ marginTop: 6 }}>See the individual workouts, open any day for its full prescription, and recalculate when the week changes.</p>
+        <WeekPlanner state={state} actions={actions} plan={plan} today={today} setTab={setTab} />
+      </div>
 
-        {blockKey === "aug" && (
-          <div className="monthcard on">
-            <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-              <h2 className="sec">August</h2>
-              <span className="badge">COMBINE</span>
-              <span className="small faint">Aug 19 – 30</span>
-              <span className="badge" style={{ color: "var(--accent)", borderColor: "var(--accent2)" }}>NOW</span>
-            </div>
-            <p className="small dim" style={{ marginTop: 6 }}><b style={{ color: "var(--ice)" }}>Mission · </b>Capture every baseline fresh — bench, pull-ups, explosive pull height, track laps — and calibrate all working weights so September runs on data, not guesses.</p>
-            <WeekPlanner state={state} actions={actions} plan={plan} today={today} setTab={setTab} />
+      <div className="card">
+        <div className="eyebrow">Aug 19 – Dec 31 · monthly milestones</div>
+
+        <div className={"monthcard" + (blockKey === "aug" ? " on" : "")}>
+          <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+            <h2 className="sec">August</h2>
+            <span className="badge">COMBINE</span>
+            <span className="small faint">Aug 19 – 30</span>
+            {blockKey === "aug" && <span className="badge" style={{ color: "var(--accent)", borderColor: "var(--accent2)" }}>NOW</span>}
           </div>
-        )}
+          <p className="small dim" style={{ marginTop: 6 }}><b style={{ color: "var(--ice)" }}>Mission · </b>Capture every baseline fresh — bench, pull-ups, explosive pull height, track laps — and calibrate all working weights so September runs on data, not guesses.</p>
+        </div>
 
         {ROADMAP.map((m) => (
           <div className={"monthcard" + (phase === m.key ? " on" : "")} key={m.key}>
@@ -2929,9 +3109,6 @@ function RoadmapView({ state, actions, plan, today, setTab }) {
             </div>
             <p className="small dim" style={{ marginTop: 6 }}><b style={{ color: "var(--ice)" }}>Performance · </b>{m.perf}</p>
             <p className="small dim" style={{ marginTop: 4 }}><b style={{ color: "var(--ice)" }}>Body / strength / skill · </b>{m.body}</p>
-            {phase === m.key && (
-              <WeekPlanner state={state} actions={actions} plan={plan} today={today} setTab={setTab} />
-            )}
           </div>
         ))}
 
@@ -2942,7 +3119,6 @@ function RoadmapView({ state, actions, plan, today, setTab }) {
               <span className="badge" style={{ color: "var(--accent)", borderColor: "var(--accent2)" }}>NOW</span>
             </div>
             <p className="small dim" style={{ marginTop: 6 }}>The block is complete — this week still plans itself while you set the next one.</p>
-            <WeekPlanner state={state} actions={actions} plan={plan} today={today} setTab={setTab} />
           </div>
         )}
 
