@@ -119,6 +119,41 @@ function rowsToLines(rows, mapper, max = 14) {
   return rows.slice(0, max).map(mapper).filter(Boolean).join(" | ");
 }
 
+function asIso(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+}
+
+function profileSummaryFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id || null,
+    summary: row.summary || "",
+    sourceStartAt: asIso(row.source_start_at),
+    sourceEndAt: asIso(row.source_end_at),
+    generatedAt: asIso(row.generated_at),
+    data: valueOfJson(row.data, {}),
+  };
+}
+
+function createdRange(groups) {
+  const timestamps = [];
+  Object.values(groups || {}).forEach((rows) => {
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      ["created_at", "last_seen_at", "generated_at"].forEach((key) => {
+        const t = row && row[key] ? new Date(row[key]).getTime() : NaN;
+        if (Number.isFinite(t)) timestamps.push(t);
+      });
+    });
+  });
+  if (!timestamps.length) return { sourceStartAt: null, sourceEndAt: null };
+  return {
+    sourceStartAt: new Date(Math.min(...timestamps)).toISOString(),
+    sourceEndAt: new Date(Math.max(...timestamps)).toISOString(),
+  };
+}
+
 export async function loadTrainerContext({ athleteKey } = {}) {
   const db = getPool();
   if (!db) return { configured: false, loaded: false, prompt: "" };
@@ -232,6 +267,397 @@ export async function loadTrainerContext({ athleteKey } = {}) {
   }
 }
 
+export async function loadTrainerProfileStatus({ athleteKey } = {}) {
+  const db = getPool();
+  if (!db) return { configured: false, loaded: false };
+  const client = await db.connect();
+  try {
+    const athlete = await ensureAthlete(client, athleteKey);
+    const latest = await client.query(
+      `SELECT id, summary, source_start_at, source_end_at, data, generated_at
+       FROM trainer_profile_summaries
+       WHERE athlete_id = $1
+       ORDER BY generated_at DESC
+       LIMIT 1`,
+      [athlete.id],
+    );
+    const latestProfile = profileSummaryFromRow(latest.rows[0]);
+    const since = latestProfile && latestProfile.generatedAt ? latestProfile.generatedAt : new Date(0).toISOString();
+    const [totals, newer] = await Promise.all([
+      client.query(
+        `SELECT
+          (SELECT count(*) FROM trainer_chat_turns WHERE athlete_id = $1)::int AS chat_turns,
+          (SELECT count(*) FROM trainer_action_log WHERE athlete_id = $1)::int AS action_log,
+          (SELECT count(*) FROM trainer_events WHERE athlete_id = $1)::int AS events,
+          (SELECT count(*) FROM trainer_memories WHERE athlete_id = $1 AND active = true)::int AS memories,
+          (SELECT count(*) FROM exercise_feedback WHERE athlete_id = $1)::int AS exercise_feedback,
+          (SELECT count(*) FROM workout_sessions WHERE athlete_id = $1)::int AS workout_sessions,
+          (SELECT count(*) FROM workout_exercise_sets WHERE athlete_id = $1)::int AS workout_sets,
+          (SELECT count(*) FROM body_metrics WHERE athlete_id = $1)::int AS body_metrics,
+          (SELECT count(*) FROM recovery_logs WHERE athlete_id = $1)::int AS recovery_logs,
+          (SELECT count(*) FROM nutrition_logs WHERE athlete_id = $1)::int AS nutrition_logs,
+          (SELECT count(*) FROM hydration_logs WHERE athlete_id = $1)::int AS hydration_logs`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT
+          (SELECT count(*) FROM trainer_chat_turns WHERE athlete_id = $1 AND created_at > $2)::int AS chat_turns,
+          (SELECT count(*) FROM trainer_action_log WHERE athlete_id = $1 AND created_at > $2)::int AS action_log,
+          (SELECT count(*) FROM trainer_events WHERE athlete_id = $1 AND created_at > $2)::int AS events,
+          (SELECT count(*) FROM trainer_memories WHERE athlete_id = $1 AND active = true AND last_seen_at > $2)::int AS memories,
+          (SELECT count(*) FROM exercise_feedback WHERE athlete_id = $1 AND created_at > $2)::int AS exercise_feedback,
+          (SELECT count(*) FROM workout_sessions WHERE athlete_id = $1 AND created_at > $2)::int AS workout_sessions,
+          (SELECT count(*) FROM workout_exercise_sets WHERE athlete_id = $1 AND created_at > $2)::int AS workout_sets,
+          (SELECT count(*) FROM body_metrics WHERE athlete_id = $1 AND created_at > $2)::int AS body_metrics,
+          (SELECT count(*) FROM recovery_logs WHERE athlete_id = $1 AND created_at > $2)::int AS recovery_logs,
+          (SELECT count(*) FROM nutrition_logs WHERE athlete_id = $1 AND created_at > $2)::int AS nutrition_logs,
+          (SELECT count(*) FROM hydration_logs WHERE athlete_id = $1 AND created_at > $2)::int AS hydration_logs`,
+        [athlete.id, since],
+      ),
+    ]);
+    return {
+      configured: true,
+      loaded: true,
+      athlete: { id: athlete.id, externalKey: athlete.external_key, displayName: athlete.display_name },
+      latest: latestProfile,
+      counts: totals.rows[0] || {},
+      newSinceSummary: latestProfile ? (newer.rows[0] || {}) : (totals.rows[0] || {}),
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      loaded: false,
+      error: error instanceof Error ? error.message : "trainer profile status unavailable",
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function loadTrainerProfileSource({ athleteKey } = {}) {
+  const db = getPool();
+  if (!db) return { configured: false, loaded: false };
+  const client = await db.connect();
+  try {
+    const athlete = await ensureAthlete(client, athleteKey);
+    const latest = await client.query(
+      `SELECT id, summary, source_start_at, source_end_at, data, generated_at
+       FROM trainer_profile_summaries
+       WHERE athlete_id = $1
+       ORDER BY generated_at DESC
+       LIMIT 1`,
+      [athlete.id],
+    );
+    const latestProfile = profileSummaryFromRow(latest.rows[0]);
+    const since = latestProfile && latestProfile.generatedAt ? latestProfile.generatedAt : new Date(0).toISOString();
+    const [
+      chat,
+      actions,
+      events,
+      memories,
+      feedback,
+      sets,
+      sessions,
+      metrics,
+      recovery,
+      nutrition,
+      hydration,
+      overrides,
+      newer,
+    ] = await Promise.all([
+      client.query(
+        `SELECT turn_date, user_message, assistant_reply, actions, model, created_at
+         FROM trainer_chat_turns
+         WHERE athlete_id = $1
+         ORDER BY created_at DESC
+         LIMIT 40`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT action_type, action, action_date, created_at
+         FROM trainer_action_log
+         WHERE athlete_id = $1
+         ORDER BY created_at DESC
+         LIMIT 120`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT event_type, occurred_on, body_area, severity, active, context, text, data, source, created_at
+         FROM trainer_events
+         WHERE athlete_id = $1
+         ORDER BY created_at DESC
+         LIMIT 80`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT memory_key, text, confidence, active, first_seen_at, last_seen_at
+         FROM trainer_memories
+         WHERE athlete_id = $1 AND active = true
+         ORDER BY confidence DESC NULLS LAST, last_seen_at DESC
+         LIMIT 80`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT feedback_date, exercise_key, exercise_name, difficulty, actual_weight, observed_rir, next_weight, note, created_at
+         FROM exercise_feedback
+         WHERE athlete_id = $1
+         ORDER BY created_at DESC
+         LIMIT 80`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT workout_date, exercise_name, weight, reps, rir, note, created_at
+         FROM workout_exercise_sets
+         WHERE athlete_id = $1
+         ORDER BY created_at DESC
+         LIMIT 80`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT workout_date, session_key, status, duration_minutes, feel, session_rpe, completion_fraction, exercises_completed, exercises_skipped, notes, data, created_at
+         FROM workout_sessions
+         WHERE athlete_id = $1
+         ORDER BY created_at DESC
+         LIMIT 80`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT kind, value_num, value_text, unit, measured_on, created_at
+         FROM body_metrics
+         WHERE athlete_id = $1
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT log_date, sleep_hours, sleep_score, readiness, hrv, resting_hr, feel, soreness, note, source, created_at
+         FROM recovery_logs
+         WHERE athlete_id = $1
+         ORDER BY created_at DESC
+         LIMIT 80`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT log_date, text, source, created_at
+         FROM nutrition_logs
+         WHERE athlete_id = $1
+         ORDER BY created_at DESC
+         LIMIT 50`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT log_date, sum(ounces)::numeric AS ounces, max(created_at) AS created_at
+         FROM hydration_logs
+         WHERE athlete_id = $1
+         GROUP BY log_date
+         ORDER BY max(created_at) DESC
+         LIMIT 40`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT override_date, override_type, patch, reason, active, created_at
+         FROM day_overrides
+         WHERE athlete_id = $1 AND active = true
+         ORDER BY created_at DESC
+         LIMIT 60`,
+        [athlete.id],
+      ),
+      client.query(
+        `SELECT
+          (SELECT count(*) FROM trainer_chat_turns WHERE athlete_id = $1 AND created_at > $2)::int AS chat_turns,
+          (SELECT count(*) FROM trainer_action_log WHERE athlete_id = $1 AND created_at > $2)::int AS action_log,
+          (SELECT count(*) FROM trainer_events WHERE athlete_id = $1 AND created_at > $2)::int AS events,
+          (SELECT count(*) FROM trainer_memories WHERE athlete_id = $1 AND active = true AND last_seen_at > $2)::int AS memories,
+          (SELECT count(*) FROM exercise_feedback WHERE athlete_id = $1 AND created_at > $2)::int AS exercise_feedback,
+          (SELECT count(*) FROM workout_sessions WHERE athlete_id = $1 AND created_at > $2)::int AS workout_sessions,
+          (SELECT count(*) FROM workout_exercise_sets WHERE athlete_id = $1 AND created_at > $2)::int AS workout_sets,
+          (SELECT count(*) FROM body_metrics WHERE athlete_id = $1 AND created_at > $2)::int AS body_metrics,
+          (SELECT count(*) FROM recovery_logs WHERE athlete_id = $1 AND created_at > $2)::int AS recovery_logs,
+          (SELECT count(*) FROM nutrition_logs WHERE athlete_id = $1 AND created_at > $2)::int AS nutrition_logs,
+          (SELECT count(*) FROM hydration_logs WHERE athlete_id = $1 AND created_at > $2)::int AS hydration_logs`,
+        [athlete.id, since],
+      ),
+    ]);
+
+    const groups = {
+      chatTurns: chat.rows,
+      actionLog: actions.rows,
+      events: events.rows,
+      memories: memories.rows,
+      exerciseFeedback: feedback.rows,
+      workoutSets: sets.rows,
+      workoutSessions: sessions.rows,
+      bodyMetrics: metrics.rows,
+      recoveryLogs: recovery.rows,
+      nutritionLogs: nutrition.rows,
+      hydrationLogs: hydration.rows,
+      dayOverrides: overrides.rows,
+    };
+    const counts = Object.fromEntries(Object.entries(groups).map(([key, rows]) => [key, rows.length]));
+    const range = createdRange(groups);
+    return {
+      configured: true,
+      loaded: true,
+      athlete: { id: athlete.id, externalKey: athlete.external_key, displayName: athlete.display_name },
+      latestSummary: latestProfile,
+      counts,
+      newSinceSummary: latestProfile ? (newer.rows[0] || {}) : counts,
+      sourceStartAt: range.sourceStartAt,
+      sourceEndAt: range.sourceEndAt,
+      data: {
+        chatTurns: chat.rows.slice().reverse().map((r) => ({
+          date: r.turn_date ? String(r.turn_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+          user: asText(r.user_message, 900),
+          coach: asText(r.assistant_reply, 700),
+          actions: valueOfJson(r.actions, []),
+          model: r.model,
+          createdAt: asIso(r.created_at),
+        })),
+        actionLog: actions.rows.slice().reverse().map((r) => ({
+          type: r.action_type,
+          date: r.action_date ? String(r.action_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+          action: valueOfJson(r.action, {}),
+          createdAt: asIso(r.created_at),
+        })),
+        events: events.rows.slice().reverse().map((r) => ({
+          type: r.event_type,
+          date: r.occurred_on ? String(r.occurred_on).slice(0, 10) : String(r.created_at).slice(0, 10),
+          bodyArea: r.body_area || "",
+          severity: numOrNull(r.severity),
+          active: r.active,
+          context: asText(r.context, 300),
+          text: asText(r.text, 500),
+          data: valueOfJson(r.data, {}),
+          source: r.source,
+          createdAt: asIso(r.created_at),
+        })),
+        memories: memories.rows.map((r) => ({
+          key: r.memory_key || "",
+          text: asText(r.text, 700),
+          confidence: numOrNull(r.confidence),
+          firstSeenAt: asIso(r.first_seen_at),
+          lastSeenAt: asIso(r.last_seen_at),
+        })),
+        exerciseFeedback: feedback.rows.slice().reverse().map((r) => ({
+          date: r.feedback_date ? String(r.feedback_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+          key: r.exercise_key || "",
+          exercise: r.exercise_name,
+          difficulty: r.difficulty,
+          actualWeight: numOrNull(r.actual_weight),
+          observedRir: numOrNull(r.observed_rir),
+          nextWeight: numOrNull(r.next_weight),
+          note: asText(r.note, 500),
+          createdAt: asIso(r.created_at),
+        })),
+        workoutSets: sets.rows.slice().reverse().map((r) => ({
+          date: r.workout_date ? String(r.workout_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+          exercise: r.exercise_name,
+          weight: numOrNull(r.weight),
+          reps: numOrNull(r.reps),
+          rir: numOrNull(r.rir),
+          note: asText(r.note, 400),
+          createdAt: asIso(r.created_at),
+        })),
+        workoutSessions: sessions.rows.slice().reverse().map((r) => ({
+          date: r.workout_date ? String(r.workout_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+          session: r.session_key || "",
+          status: r.status,
+          duration: numOrNull(r.duration_minutes),
+          feel: r.feel || "",
+          sessionRpe: numOrNull(r.session_rpe),
+          completionFraction: numOrNull(r.completion_fraction),
+          completed: valueOfJson(r.exercises_completed, []),
+          skipped: valueOfJson(r.exercises_skipped, []),
+          notes: asText(r.notes, 500),
+          data: valueOfJson(r.data, {}),
+          createdAt: asIso(r.created_at),
+        })),
+        bodyMetrics: metrics.rows.slice().reverse().map((r) => ({
+          date: r.measured_on ? String(r.measured_on).slice(0, 10) : String(r.created_at).slice(0, 10),
+          kind: r.kind,
+          value: r.value_num == null ? r.value_text : numOrNull(r.value_num),
+          unit: r.unit || "",
+          createdAt: asIso(r.created_at),
+        })),
+        recoveryLogs: recovery.rows.slice().reverse().map((r) => ({
+          date: r.log_date ? String(r.log_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+          sleepHours: numOrNull(r.sleep_hours),
+          sleepScore: numOrNull(r.sleep_score),
+          readiness: numOrNull(r.readiness),
+          hrv: numOrNull(r.hrv),
+          restingHr: numOrNull(r.resting_hr),
+          feel: r.feel || "",
+          soreness: valueOfJson(r.soreness, {}),
+          note: asText(r.note, 500),
+          source: r.source,
+          createdAt: asIso(r.created_at),
+        })),
+        nutritionLogs: nutrition.rows.slice().reverse().map((r) => ({
+          date: r.log_date ? String(r.log_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+          text: asText(r.text, 700),
+          source: r.source,
+          createdAt: asIso(r.created_at),
+        })),
+        hydrationLogs: hydration.rows.slice().reverse().map((r) => ({
+          date: r.log_date ? String(r.log_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+          ounces: numOrNull(r.ounces),
+          createdAt: asIso(r.created_at),
+        })),
+        dayOverrides: overrides.rows.slice().reverse().map((r) => ({
+          date: r.override_date ? String(r.override_date).slice(0, 10) : String(r.created_at).slice(0, 10),
+          type: r.override_type,
+          patch: valueOfJson(r.patch, {}),
+          reason: asText(r.reason, 500),
+          active: !!r.active,
+          createdAt: asIso(r.created_at),
+        })),
+      },
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      loaded: false,
+      error: error instanceof Error ? error.message : "trainer profile source unavailable",
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function saveTrainerProfileSummary({ athleteKey, summary, data, sourceStartAt, sourceEndAt } = {}) {
+  const db = getPool();
+  if (!db) return { configured: false, saved: false };
+  const client = await db.connect();
+  try {
+    const athlete = await ensureAthlete(client, athleteKey);
+    const result = await client.query(
+      `INSERT INTO trainer_profile_summaries (athlete_id, summary, source_start_at, source_end_at, data)
+       VALUES ($1, $2, $3, $4, $5::jsonb)
+       RETURNING id, summary, source_start_at, source_end_at, data, generated_at`,
+      [
+        athlete.id,
+        asText(summary, 4000) || "Not enough durable trainer data yet.",
+        sourceStartAt || null,
+        sourceEndAt || null,
+        payload(data || {}),
+      ],
+    );
+    return {
+      configured: true,
+      saved: true,
+      profile: profileSummaryFromRow(result.rows[0]),
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      saved: false,
+      error: error instanceof Error ? error.message : "trainer profile save failed",
+    };
+  } finally {
+    client.release();
+  }
+}
+
 function dayOverrideFromRow(row) {
   const patch = valueOfJson(row.patch, {});
   const type = row.override_type || patch.type;
@@ -255,6 +681,48 @@ function dayOverrideFromRow(row) {
   return Object.keys(out).length ? out : null;
 }
 
+function normalizeGoalKey(value) {
+  const s = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!s) return null;
+  const compact = s.replace(/\s+/g, "");
+  if (compact === "fivek" || /5k|fivek|five k|five kilometer/.test(s)) return "fiveK";
+  if (/mile|1600/.test(s)) return "mile";
+  if (/bench|press/.test(s)) return "bench";
+  if (/pull/.test(s)) return "pullup";
+  if (/muscle up|muscleup|\bmu\b/.test(s)) return "mu";
+  if (/bodyweight|body weight|weight/.test(s)) return "bw";
+  if (/abs|physique|lean/.test(s)) return "abs";
+  if (/speed|agility|corner|route|cutting|change of direction/.test(s)) return "speed";
+  if (/vertical|jump|dunk/.test(s)) return "vertical";
+  return ["mile", "bench", "pullup", "mu", "bw", "abs", "speed", "vertical"].includes(compact) ? compact : null;
+}
+
+function secondsFromMmss(value) {
+  const m = String(value || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function goalOverrideFromAction(row) {
+  const action = valueOfJson(row.action, {});
+  const key = normalizeGoalKey(action.key || action.goal);
+  if (!key) return null;
+  const target = String(action.target == null ? "" : action.target).trim();
+  const lower = target.toLowerCase();
+  const off = action.active === false || /\b(remove|drop|retire|pause|stop|inactive|off|no longer|not anymore|do not care|don't care|dont care|not a goal)\b/.test(lower);
+  const on = action.active === true || /\b(restore|resume|active|on|restart|bring back)\b/.test(lower);
+  if (off) return { key, override: { active: false, label: "Paused", reason: action.reason || action.note || target || "Paused by trainer chat", updatedAt: tsMs(row.created_at) } };
+  const override = { active: true, label: target || "Active", reason: action.reason || action.note || "", updatedAt: tsMs(row.created_at) };
+  const priority = asNumber(action.priority);
+  if (priority != null) override.priority = Math.max(0.35, Math.min(1.8, priority));
+  const sec = secondsFromMmss(target);
+  const num = Number.parseFloat(target);
+  if (sec != null) override.targetSec = sec;
+  else if (Number.isFinite(num)) override.targetVal = num;
+  else if (on && !target) override.label = "Active";
+  return { key, override };
+}
+
 export async function loadTrainerSnapshot({ athleteKey } = {}) {
   const db = getPool();
   if (!db) return { configured: false, hydrated: false, state: null };
@@ -271,6 +739,7 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
       sessions,
       feedback,
       overrides,
+      goalActions,
     ] = await Promise.all([
       client.query(
         `SELECT memory_key, text, confidence, last_seen_at
@@ -344,6 +813,14 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
          LIMIT 180`,
         [athlete.id],
       ),
+      client.query(
+        `SELECT action, created_at
+         FROM trainer_action_log
+         WHERE athlete_id = $1 AND action_type = 'set_goal'
+         ORDER BY created_at ASC
+         LIMIT 120`,
+        [athlete.id],
+      ),
     ]);
 
     const snapshot = {
@@ -411,6 +888,7 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
       coachMemory: { observations: [] },
       dayWorkoutOverrides: {},
       dayFlags: {},
+      goalOverrides: {},
     };
 
     metrics.rows.forEach((m) => {
@@ -443,6 +921,11 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
       if (row.override_type === "flag_exhausted") snapshot.dayFlags[date] = "exhausted";
       const patch = dayOverrideFromRow(row);
       if (patch) snapshot.dayWorkoutOverrides[date] = { ...(snapshot.dayWorkoutOverrides[date] || {}), ...patch };
+    });
+
+    goalActions.rows.forEach((row) => {
+      const parsed = goalOverrideFromAction(row);
+      if (parsed) snapshot.goalOverrides[parsed.key] = { ...(snapshot.goalOverrides[parsed.key] || {}), ...parsed.override };
     });
 
     return {
@@ -598,6 +1081,26 @@ async function persistAction(client, athleteId, turnId, action, fallbackDate) {
          (athlete_id, turn_id, workout_date, exercise_name, weight, reps, rir, note, data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
       [athleteId, turnId, date, asText(action.name || "exercise", 160), asNumber(action.weight), asNumber(action.reps), asNumber(action.rir), actionText(action) || null, payload(action)],
+    );
+  } else if (type === "set_goal" && action.key) {
+    const goalKey = normalizeGoalKey(action.key) || asText(action.key, 80);
+    const target = asText(action.target || "", 240);
+    const inactive = action.active === false || /\b(remove|drop|retire|pause|stop|inactive|off|no longer|not anymore|do not care|don't care|dont care|not a goal)\b/i.test(target);
+    const priority = asNumber(action.priority);
+    const priorityText = priority != null ? ` Priority multiplier ${Math.max(0.35, Math.min(1.8, priority))}.` : "";
+    const text = inactive
+      ? `Goal ${goalKey} is paused and should not drive workout selection.`
+      : `Goal ${goalKey} target is ${target || "active"}.${priorityText}`;
+    await client.query(
+      `INSERT INTO trainer_memories (athlete_id, memory_key, text, confidence, data)
+       VALUES ($1, $2, $3, 0.95, $4::jsonb)
+       ON CONFLICT (athlete_id, memory_key) WHERE memory_key IS NOT NULL
+       DO UPDATE SET text = EXCLUDED.text,
+                     confidence = EXCLUDED.confidence,
+                     active = true,
+                     data = trainer_memories.data || EXCLUDED.data,
+                     last_seen_at = now()`,
+      [athleteId, "goal_" + goalKey, text, payload(action)],
     );
   } else if (["complete_session", "log_partial_session", "skip_session"].includes(type)) {
     const status = type === "complete_session" ? "completed" : type === "skip_session" ? "skipped" : "partial";

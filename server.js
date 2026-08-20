@@ -3,7 +3,8 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createViteServer } from "vite";
-import { checkDatabaseConnection, loadTrainerSnapshot } from "./api/_db.js";
+import { checkDatabaseConnection, loadTrainerProfileStatus, loadTrainerSnapshot } from "./api/_db.js";
+import { refreshTrainerProfileSummary } from "./api/_profile.js";
 import trainerHandler from "./api/trainer.js";
 
 const app = express();
@@ -33,6 +34,22 @@ app.get("/api/trainer/state", async (req, res) => {
   if (!snapshot.configured) return res.status(200).json(snapshot);
   if (!snapshot.hydrated) return res.status(503).json(snapshot);
   return res.status(200).json(snapshot);
+});
+
+app.get("/api/trainer/profile", async (req, res) => {
+  const athleteKey = String(req.query.athleteKey || process.env.TRAINER_ATHLETE_KEY || "local-demo").slice(0, 120);
+  const status = await loadTrainerProfileStatus({ athleteKey });
+  return res.status(status.loaded || !status.configured ? 200 : 503).json({
+    ...status,
+    openai: Boolean(process.env.OPENAI_API_KEY),
+  });
+});
+
+app.post("/api/trainer/profile/refresh", async (req, res) => {
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const athleteKey = String(body.athleteKey || process.env.TRAINER_ATHLETE_KEY || "local-demo").slice(0, 120);
+  const result = await refreshTrainerProfileSummary({ athleteKey, force: true, reason: "manual" });
+  return res.status(result.refreshed || result.reason === "waiting_for_more_evidence" || !result.configured ? 200 : 503).json(result);
 });
 
 if (isProd) {

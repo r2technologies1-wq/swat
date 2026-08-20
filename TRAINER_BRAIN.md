@@ -20,3 +20,18 @@ Important recovery rule examples:
 - Partial sessions credit only exercises actually completed.
 
 The Coach can modify today's remaining session and the rest of the week from natural-language feedback.
+
+## Goal management
+
+Long-term goals are editable by chat, not hard-coded forever. Messages like "I don't care about dunking anymore" create a paused `set_goal` action, which removes that goal's pressure from future forecasts. Messages like "make 5K the main goal" raise that goal's priority, so the weekly stimulus budget favors the modules that most directly support it.
+
+The Roadmap shows the North Star targets and a goal audit. The Performance page shows the same audit plus week-by-week coverage so the athlete can see whether logged work is actually keeping pace instead of trusting a static calendar.
+
+## Self-improving loop
+
+The model does not learn by changing its weights. The app improves by running a capture -> store -> retrieve -> inject loop:
+
+- `/api/trainer` turns natural text into validated actions, then stores the turn and structured signals in Neon.
+- `/api/trainer/profile/refresh` distills recent raw logs into a compact profile summary.
+- Future trainer calls load the compact profile plus recent raw history, so recommendations can reflect exercise feedback, load progression, missed work, travel, sleep, soreness, water, nutrition, and day constraints.
+- The profile refresh can run automatically after saved trainer turns, or manually from Settings while developing.
