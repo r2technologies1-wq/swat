@@ -437,7 +437,7 @@ test("three hard days trigger recovery", () => {
   assert.equal(d.id, "REC");
 });
 
-test("local coach fallback extracts common trainer messages", () => {
+test("deterministic trainer parser extracts common messages", () => {
   const state = baseState();
   const p = plan("2026-09-15", state);
   let r = E.localCoachTurn(state, p, "2026-09-15", "159.2 this morning");

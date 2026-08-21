@@ -59,14 +59,11 @@ export default async function handler(req, res) {
   const athleteKey = String(body.athleteKey || process.env.TRAINER_ATHLETE_KEY || "local-demo").slice(0, 120);
 
   if (!process.env.OPENAI_API_KEY) {
-    return res.status(200).json({
-      configured: false,
-      db: { configured: databaseConfigured(), loaded: false },
-      text: JSON.stringify({
-        reply: "The trainer brain is installed, but the server still needs its OPENAI_API_KEY environment variable. Nothing from this message was logged.",
-        actions: [],
-      }),
-    });
+    return res.status(503).json({ error: "OPENAI_API_KEY is missing. Trainer chat is disabled so messages are not falsely logged." });
+  }
+
+  if (!databaseConfigured()) {
+    return res.status(503).json({ error: "NEON_DATABASE_URL or DATABASE_URL is missing. Trainer chat is disabled because durable memory is unavailable." });
   }
 
   const system = String(body.system || "").slice(0, MAX_SYSTEM_CHARS);
@@ -99,6 +96,9 @@ Reply like a real trainer: conversational and concise. If you stored or changed 
 
   try {
     const dbContext = await loadTrainerContext({ athleteKey });
+    if (!dbContext.loaded) {
+      return res.status(503).json({ error: dbContext.error || "Database memory unavailable. Trainer chat is disabled until Postgres is reachable." });
+    }
     const model = process.env.OPENAI_MODEL || "gpt-5-mini";
     const apiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",

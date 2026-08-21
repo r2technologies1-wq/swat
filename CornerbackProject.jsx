@@ -1,11 +1,11 @@
 /* ============================================================================
    THE CORNERBACK PROJECT — adaptive personalized trainer + hybrid-athlete dashboard
    ----------------------------------------------------------------------------
-   Local-first. Win the block, not the day.
+   API-backed trainer. Win the block, not the day.
 
    Architecture (single file, but strictly layered):
-     1. Storage adapter          — window.storage (Claude) -> localStorage
-                                   (self-hosted) -> in-memory fallback.
+     1. UI state cache           — browser state keeps the interface usable;
+                                   trainer chat/memory requires API + Postgres.
      2. HealthDataProvider       — abstraction for a future HealthKit bridge.
                                    Mock data today. Do NOT read Apple Health
                                    from browser JS; the future path is
@@ -3079,12 +3079,12 @@ function localCoachTurn(state, plan, today, userText, opts) {
   if (actions.length === 0) add({ type: "log_note", text: text, date: today });
   var fallbackReason = opts && opts.fallbackReason ? String(opts.fallbackReason) : "";
   var reply = fallbackReason
-    ? "I could not reach the trainer backend (" + fallbackReason + "), so I used the local fallback and saved what I could."
-    : "Saved locally. I turned that message into structured trainer data so the next forecast can use it.";
+    ? "Trainer backend failed (" + fallbackReason + "). Nothing should be treated as durable trainer memory until the backend succeeds."
+    : "Structured trainer actions extracted.";
   if (actions.some(function (a) { return a.type === "defer_exercises"; })) {
-    reply = "Got it. I moved that piece out of today's session and attached it to " + fmtShort(targetDate === today ? tomorrow : targetDate) + (fallbackReason ? ". Backend was unreachable, so this used the local fallback." : ".");
+    reply = "Got it. I moved that piece out of today's session and attached it to " + fmtShort(targetDate === today ? tomorrow : targetDate) + ".";
   } else if (actions.some(function (a) { return a.type === "move_session"; })) {
-    reply = "Got it. I pinned those days as requested. That sets the plan; you will still log what actually happened after training." + (fallbackReason ? " Backend was unreachable, so this used the local fallback." : "");
+    reply = "Got it. I pinned those days as requested. That sets the plan; you will still log what actually happened after training.";
   } else if (actions.some(function (a) { return a.type === "set_goal"; })) {
     reply = "Got it. I updated that goal locally so the planner can rebuild the forecast around the goals you still care about.";
   } else if (actions.some(function (a) { return a.type === "modify_today_session" || a.type === "extend_today_session" || a.type === "shorten_today_session" || a.type === "set_day_time" || a.type === "set_day_constraints" || a.type === "skip_session"; })) {
@@ -5846,7 +5846,7 @@ function SettingsView({ state, actions }) {
           <label>Trainer endpoint</label>
           <input className="input" placeholder="/api/trainer" value={state.settings.coachEndpoint || "/api/trainer"} onChange={(e) => actions.setCoachEndpoint(e.target.value)} />
         </div>
-        <p className="small faint" style={{ marginTop: 6 }}>Default: /api/trainer. If the endpoint is unavailable, common messages fall back to local extraction in this browser.</p>
+        <p className="small faint" style={{ marginTop: 6 }}>Default: /api/trainer. Trainer chat requires the backend, OpenAI key, and Postgres memory. If any piece is unavailable, messages are not logged.</p>
         <div className="btnrow">
           <button className="btn subtle sm" onClick={actions.clearChat}>Clear chat history</button>
         </div>
@@ -5892,7 +5892,7 @@ function SettingsView({ state, actions }) {
 
       <div className="card">
         <div className="eyebrow">Data</div>
-        <p className="small dim" style={{ marginTop: 6 }}>Storage backend: <b style={{ color: "var(--ice)" }}>{backend}</b>. Everything lives on your side — export any time.</p>
+        <p className="small dim" style={{ marginTop: 6 }}>Browser cache: <b style={{ color: "var(--ice)" }}>{backend}</b>. Trainer memory lives in Postgres when the backend is connected.</p>
         <div className="btnrow">
           <button className="btn sm" onClick={() => setShowExport(!showExport)}>{showExport ? "Hide export" : "Export JSON"}</button>
           <button className="btn subtle sm" onClick={actions.replayOnboarding}>Replay setup tour</button>
@@ -5940,13 +5940,8 @@ async function claudeCall(sys, msgs) {
   return parseCoachReply(text);
 }
 
-/* Self-hosting: never ship an API key in browser code. Deploy a ~15-line proxy
-   (Vercel function / Replit endpoint) that forwards the request body to
-   https://api.anthropic.com/v1/messages with headers
-   { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
-     "content-type": "application/json" }
-   and returns the JSON unchanged. Paste its URL in Settings → AI Coach.
-   The chain below tries: your proxy → your OpenAI key → built-in Claude. */
+/* Trainer chat is backend-required. Do not ship API keys in browser code, and
+   do not pretend a local parser is durable trainer memory. */
 
 async function coachTurn(state, plan, today, userText) {
   const sys = buildCoachSystem(state, plan, today);
@@ -6187,9 +6182,12 @@ function CoachDrawer({ open, onClose, state, actions, plan, today }) {
       const acts = runCoachActions(res.actions, { state, actions, plan, today });
       actions.pushChat({ role: "assistant", text: res.reply || (acts.length ? "Done." : "Tell me more."), acts });
     } catch (e) {
-      const res = localCoachTurn(state, plan, today, t, { fallbackReason: e instanceof Error ? e.message : "unreachable" });
-      const acts = runCoachActions(res.actions, { state, actions, plan, today });
-      actions.pushChat({ role: "assistant", text: res.reply || "Saved locally.", acts });
+      const detail = e instanceof Error ? e.message : "Trainer backend unavailable";
+      actions.pushChat({
+        role: "assistant",
+        text: "Trainer backend is not connected, so I did not log or change anything. Fix the API/DB connection, then send that again. Detail: " + detail,
+        acts: [],
+      });
     }
     setBusy(false);
   };
