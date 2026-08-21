@@ -689,12 +689,24 @@ function normalizeGoalKey(value) {
   if (/mile|1600/.test(s)) return "mile";
   if (/bench|press/.test(s)) return "bench";
   if (/pull/.test(s)) return "pullup";
+  if (/push ?ups?|pushup/.test(s)) return "pushup";
   if (/muscle up|muscleup|\bmu\b/.test(s)) return "mu";
   if (/bodyweight|body weight|weight/.test(s)) return "bw";
   if (/abs|physique|lean/.test(s)) return "abs";
   if (/speed|agility|corner|route|cutting|change of direction/.test(s)) return "speed";
   if (/vertical|jump|dunk/.test(s)) return "vertical";
-  return ["mile", "bench", "pullup", "mu", "bw", "abs", "speed", "vertical"].includes(compact) ? compact : null;
+  return ["mile", "bench", "pullup", "pushup", "mu", "bw", "abs", "speed", "vertical"].includes(compact) ? compact : null;
+}
+
+function normalizeSessionSlot(value) {
+  const s = String(value || "").toUpperCase().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+  const known = new Set(["A", "B", "C", "D", "QR1", "QR2", "EASY", "CAL_UP", "CAL_LOW", "CAL_TRACK", "CAL_ACCA", "CAL_ACCC"]);
+  if (known.has(s)) return s;
+  if (/UPPER|PUSH|PRESS|CHEST/.test(s)) return "A";
+  if (/PULL|BACK|ARM/.test(s)) return "C";
+  if (/LOWER|LEG|HINGE/.test(s)) return "B";
+  if (/TRACK|RUN|CARDIO/.test(s)) return "QR1";
+  return null;
 }
 
 function secondsFromMmss(value) {
@@ -740,6 +752,7 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
       feedback,
       overrides,
       goalActions,
+      sessionMoves,
     ] = await Promise.all([
       client.query(
         `SELECT memory_key, text, confidence, last_seen_at
@@ -821,6 +834,14 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
          LIMIT 120`,
         [athlete.id],
       ),
+      client.query(
+        `SELECT action, action_date, created_at
+         FROM trainer_action_log
+         WHERE athlete_id = $1 AND action_type = 'move_session'
+         ORDER BY created_at ASC
+         LIMIT 120`,
+        [athlete.id],
+      ),
     ]);
 
     const snapshot = {
@@ -869,7 +890,7 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
         source: r.source || "postgres",
         ts: tsMs(r.created_at),
       })),
-      metrics: { bodyweight: [], waist: [], pullupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
+      metrics: { bodyweight: [], waist: [], pullupBest: [], pushupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
       log: sessions.rows.map((s) => ({
         date: s.workout_date ? String(s.workout_date).slice(0, 10) : String(s.created_at).slice(0, 10),
         sessionId: s.session_key || null,
@@ -886,6 +907,7 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
         source: "postgres",
       })),
       coachMemory: { observations: [] },
+      pins: {},
       dayWorkoutOverrides: {},
       dayFlags: {},
       goalOverrides: {},
@@ -898,6 +920,7 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
       if (m.kind === "bodyweight" && numeric != null) snapshot.metrics.bodyweight.push({ date, v: numeric, ts: tsMs(m.created_at), source: "postgres" });
       else if (m.kind === "waist" && numeric != null) snapshot.metrics.waist.push({ date, v: numeric, ts: tsMs(m.created_at), source: "postgres" });
       else if (m.kind === "pullup" && numeric != null) snapshot.metrics.pullupBest.push({ date, v: numeric, ts: tsMs(m.created_at), source: "postgres" });
+      else if (m.kind === "pushup" && numeric != null) snapshot.metrics.pushupBest.push({ date, v: numeric, ts: tsMs(m.created_at), source: "postgres" });
       else if (m.kind === "mile" && raw != null) snapshot.metrics.mileBest = raw;
       else if (m.kind === "fiveK" && raw != null) snapshot.metrics.fiveKBest = raw;
       else if (m.kind === "muscleUp") snapshot.metrics.muscleUp = Boolean(raw);
@@ -926,6 +949,14 @@ export async function loadTrainerSnapshot({ athleteKey } = {}) {
     goalActions.rows.forEach((row) => {
       const parsed = goalOverrideFromAction(row);
       if (parsed) snapshot.goalOverrides[parsed.key] = { ...(snapshot.goalOverrides[parsed.key] || {}), ...parsed.override };
+    });
+
+    sessionMoves.rows.forEach((row) => {
+      const action = valueOfJson(row.action, {});
+      const slot = normalizeSessionSlot(action.slot || action.session || action.session_id);
+      const date = action.to_date || action.date || row.action_date;
+      const key = date ? String(date).slice(0, 10) : null;
+      if (slot && key && /^\d{4}-\d{2}-\d{2}$/.test(key)) snapshot.pins[key] = slot;
     });
 
     return {
