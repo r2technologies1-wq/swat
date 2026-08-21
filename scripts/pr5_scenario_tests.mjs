@@ -54,16 +54,19 @@ function baseState(overrides = {}) {
         bodyweight: "158",
         mile: "5:57",
         fiveK: "21:55",
-        pullupMax: "15",
+        pullupMax: "13",
+        pushupMax: "33",
         benchBaseline: "135 x 10",
         verticalJump: "",
       },
       savedAt: {},
     },
-    metrics: { bodyweight: [], waist: [], pullupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
+    metrics: { bodyweight: [], waist: [], pullupBest: [], pushupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
     exercises,
     goalOverrides: {},
     log: [],
+    pins: {},
+    ui: {},
   }, overrides);
 }
 
@@ -71,7 +74,7 @@ function plan(today, state, log = []) {
   return E.planWeek({
     today,
     log,
-    pins: {},
+    pins: state.pins || {},
     dayFlags: {},
     settings: state.settings,
     knee: state.settings.knee,
@@ -214,6 +217,13 @@ test("paused goals stop driving the forecast", () => {
   assert.equal(audit.find((r) => r.key === "vertical").active, false);
 });
 
+test("push-up goal is first-class planner data", () => {
+  const state = baseState({ metrics: { pushupBest: [{ date: "2026-08-20", v: 33 }] } });
+  const rows = E.pr5GoalAuditRows(state, plan("2026-09-15", state), "2026-09-15");
+  assert.equal(E.normalizeGoalKey("100 pushups"), "pushup");
+  assert.ok(rows.some((r) => r.key === "pushup"), "expected push-up goal in audit rows");
+});
+
 test("local coach can pause or prioritize long-term goals", () => {
   const state = baseState();
   const p = plan("2026-09-15", state);
@@ -224,10 +234,70 @@ test("local coach can pause or prioritize long-term goals", () => {
   assert.ok(r.actions.some((a) => a.type === "set_goal" && a.key === "fiveK" && a.priority === 1.35));
 });
 
+test("local coach can pin combine upper today and lower tomorrow", () => {
+  const state = baseState({ settings: { weekdayMinutes: { 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 60, 6: 60 } } });
+  const p = plan("2026-08-20", state);
+  const r = E.localCoachTurn(state, p, "2026-08-20", "today i will do upper body and tomorrow lower body");
+  assert.ok(r.actions.some((a) => a.type === "move_session" && a.slot === "CAL_UP" && a.to_date === "2026-08-20"));
+  assert.ok(r.actions.some((a) => a.type === "move_session" && a.slot === "CAL_LOW" && a.to_date === "2026-08-21"));
+
+  const pinned = baseState({
+    settings: { weekdayMinutes: { 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 60, 6: 60 } },
+    pins: { "2026-08-20": "CAL_UP", "2026-08-21": "CAL_LOW" },
+  });
+  const pinnedPlan = plan("2026-08-20", pinned);
+  assert.equal(todayPlan(pinnedPlan, "2026-08-20").id, "CAL_UP");
+  assert.equal(todayPlan(pinnedPlan, "2026-08-21").id, "CAL_LOW");
+});
+
+test("completed combine unlocks goal-driven training before September", () => {
+  const state = baseState({
+    settings: { weekdayMinutes: { 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 60, 6: 60 } },
+    pins: { "2026-08-21": "CAL_LOW" },
+    ui: { combineComplete: true },
+  });
+  const p = plan("2026-08-20", state);
+  assert.equal(p.calMode, false);
+  assert.equal(todayPlan(p, "2026-08-21").id, "B");
+  assert.ok(todayPlan(p, "2026-08-21").autoOverride, "pinned lower intent should still be rebuilt as a coached modular training day");
+});
+
+test("pinned upper and lower intents become coached modular training after combine", () => {
+  const state = baseState({
+    settings: { weekdayMinutes: { 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 60, 6: 60 } },
+    pins: { "2026-08-20": "CAL_UP", "2026-08-21": "CAL_LOW" },
+    ui: { combineComplete: true },
+  });
+  const p = plan("2026-08-20", state);
+  const upper = todayPlan(p, "2026-08-20");
+  const lower = todayPlan(p, "2026-08-21");
+  assert.match(upper.displayName, /Coached Training/);
+  assert.ok((upper.autoOverride.modules || []).includes("fieldConditioning"));
+  assert.ok((upper.autoOverride.modules || []).includes("pressStrength"));
+  assert.ok((upper.autoOverride.modules || []).includes("verticalPower"), "upper coached day should be allowed a tiny lower-power/jump touch when safe");
+  assert.match(lower.displayName, /Coached Training/);
+  assert.ok((lower.autoOverride.modules || []).includes("lowerStrength"));
+  assert.ok((lower.autoOverride.add || []).some((x) => ["sledPush", "battleRope", "ballSlam", "medBallMtClimber"].includes(x.id)));
+});
+
+test("isolated lower coached day can include a tiny upper-back touch when safe", () => {
+  const state = baseState({
+    settings: { weekdayMinutes: { 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 60, 6: 60 } },
+    pins: { "2026-08-20": "CAL_LOW" },
+    ui: { combineComplete: true },
+  });
+  const p = plan("2026-08-20", state);
+  const lower = todayPlan(p, "2026-08-20");
+  assert.match(lower.displayName, /Coached Training/);
+  assert.ok((lower.autoOverride.modules || []).includes("lowerStrength"));
+  assert.ok((lower.autoOverride.modules || []).includes("horizontalPull"));
+});
+
 test("large time window can combine compatible modules", () => {
   const state = baseState({ settings: { weekdayMinutes: { 0: 75, 1: 60, 2: 60, 3: 60, 4: 60, 5: 60, 6: 0 }, skillStage: 3 } });
   const p = plan("2026-09-14", state);
   assert.ok(p.days.some((d) => d.autoOverride && (d.autoOverride.modules || []).length >= 2));
+  assert.ok(p.days.some((d) => d.autoOverride && (d.autoOverride.modules || []).includes("fieldConditioning")), "large weeks should surface athletic field-conditioning work when speed/vertical goals need it");
 });
 
 test("sub-15-minute availability becomes a goal-linked micro-dose", () => {
@@ -264,6 +334,25 @@ test("adaptive module prescriptions vary and respect exercise avoidance", () => 
   const rows = ids(E.pr5ModuleRows("pressStrength", 60, 1, avoidBench, "2026-09-14"));
   assert.ok(!rows.includes("benchA"), "avoidance memory should remove benchA when another useful prescription exists");
   assert.ok(rows.length > 0);
+});
+
+test("field conditioning module uses coach-style athletic circuits", () => {
+  const state = baseState({
+    trainerMemory: { facts: [{ key: "coach_style", text: "Prefers sleds, battle ropes, med-ball slams and cornerback conditioning circuits", date: "2026-08-20" }] },
+  });
+  const rows = ids(E.pr5ModuleRows("fieldConditioning", 40, 3, state, "2026-09-16"));
+  assert.ok(rows.some((id) => ["battleRope", "ballSlam", "sledPush", "landminePress", "walkingLungeSlam", "trapBarJump", "boxJump"].includes(id)));
+});
+
+test("equipment memory removes unavailable tibialis raises", () => {
+  const state = baseState({
+    trainerMemory: { facts: [{ key: "no_tibialis_machine", text: "Main gym does not have tibialis raise setup", date: "2026-08-20" }] },
+  });
+  for (let i = 0; i < 10; i += 1) {
+    const rows = ids(E.pr5ModuleRows("verticalPower", 60, 1, state, E.addDays("2026-09-14", i)));
+    assert.ok(!rows.includes("tibRaise"), "tibialis raise should be removed when main gym lacks the setup");
+    assert.ok(rows.length > 0, "verticalPower should still have a useful alternative");
+  }
 });
 
 test("exercise feedback progresses known and newly learned accessory loads", () => {

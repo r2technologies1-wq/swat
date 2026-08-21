@@ -175,9 +175,11 @@ const EXERCISE_DEFAULTS = {
   hipThrust: { name: "Hip thrust / glute bridge",      weight: null, inc: 10, unit: "lb", cal: true,  group: "B" },
   rdl:       { name: "Romanian deadlift",              weight: null, inc: 10, unit: "lb", cal: true,  group: "B" },
   hamCurl:   { name: "Hamstring curl",                 weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
+  splitSquat:{ name: "Split squat",                     weight: null, inc: 5,  unit: "lb/db", cal: false, group: "B" },
   stepUp:    { name: "Low step-up / Spanish squat iso",weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
   calfRaise: { name: "Standing calf raise",            weight: null, inc: 10, unit: "lb", cal: true,  group: "B" },
   tibRaise:  { name: "Tibialis raise",                 weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
+  legExt:    { name: "Leg extension",                  weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
   bandWalk:  { name: "Lateral band walk",              weight: 0,    inc: 0,  unit: "band", cal: false, bw: true, group: "B" },
   pallof:    { name: "Pallof press",                   weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
 
@@ -192,6 +194,15 @@ const EXERCISE_DEFAULTS = {
   facePull:  { name: "Face pull",                      weight: null, inc: 5,  unit: "lb", cal: true,  group: "C" },
 
   mbThrow:   { name: "Medicine-ball chest throw",      weight: null, inc: 2,  unit: "lb ball", cal: true, group: "D" },
+  sledPush:  { name: "Sled push / drag",               weight: null, inc: 10, unit: "lb", cal: false, group: "D" },
+  battleRope:{ name: "Battle ropes",                   weight: 0,    inc: 0,  unit: "30-60 s", cal: false, bw: true, group: "D" },
+  ballSlam:  { name: "Medicine-ball slam",             weight: 16,   inc: 2,  unit: "lb ball", cal: false, group: "D" },
+  medBallMtClimber: { name: "Medicine-ball mountain climber", weight: 0, inc: 0, unit: "30-60 s", cal: false, bw: true, group: "D" },
+  trapBarJump: { name: "Trap-bar jump",                weight: null, inc: 10, unit: "lb", cal: false, group: "D" },
+  landminePress: { name: "Landmine shoulder press",    weight: null, inc: 5,  unit: "lb", cal: false, group: "D" },
+  walkingLungeSlam: { name: "Walking lunge + med-ball slam", weight: null, inc: 2, unit: "lb ball", cal: false, group: "D" },
+  boxJump:   { name: "Box jump",                       weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
+  trxRow:    { name: "TRX low row",                    weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
   farmer:    { name: "Farmer carry",                   weight: null, inc: 10, unit: "lb/hand", cal: true, group: "D" },
   ssRdl:     { name: "DB split-stance RDL",            weight: null, inc: 5,  unit: "lb", cal: true,  group: "D" },
   pushup:    { name: "Push-up",                        weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
@@ -586,6 +597,7 @@ const BUDGET_DEF = [
 
 /* Priority ladder when the week compresses. Minimums beat bonuses; A is never auto-dropped. */
 const PRIORITY = ["A", "QR1", "B", "C", "QR2", "EASY", "D"];
+const PINNABLE_SLOTS = [...PRIORITY, ...CAL_CORE_IDS, ...CAL_OPTIONAL_IDS];
 const DROP_ORDER = ["D", "EASY", "QR2", "C", "B", "QR1"];
 const KNEE_ALT = { QR1: "XT1", QR2: "XT2", B: "BSAFE", EASY: "EASYXT" };
 const SLOT_OF = {}; // XT1 -> QR1 etc.
@@ -657,8 +669,9 @@ const SPORT_RULES = [
 const GOALS = [
   { key: "mile",   label: "Mile",        start: "5:57", target: "5:30", unit: "time", targetSec: 330, startSec: 357 },
   { key: "fiveK",  label: "5K",          start: "21:55", target: "Sub-20:00", unit: "time", targetSec: 1200, startSec: 1315 },
-  { key: "bench",  label: "Bench",       start: "135 × ~10", target: "225 × 1 (stretch)", unit: "lb", targetVal: 225 },
-  { key: "pullup", label: "Pull-ups",    start: "~15 strict", target: "20+ strict", unit: "reps", targetVal: 20, startVal: 15 },
+  { key: "bench",  label: "Bench",       start: "165 × 5 @ RIR 2", target: "225 × 4 × 10", unit: "lb", targetVal: 225 },
+  { key: "pullup", label: "Pull-ups",    start: "13 strict", target: "20+ strict", unit: "reps", targetVal: 20, startVal: 13 },
+  { key: "pushup", label: "Push-ups",    start: "33 clean", target: "100 straight", unit: "reps", targetVal: 100, startVal: 33 },
   { key: "mu",     label: "Muscle-up",   start: "Not yet", target: "1 clean bar MU", unit: "bool" },
   { key: "bw",     label: "Bodyweight",  start: "~158 lb", target: "163–168 lean", unit: "lb", bandLo: 163, bandHi: 168, startVal: 158 },
   { key: "abs",    label: "Physique",    start: "Lean baseline", target: "Clear abdominal definition", unit: "note" },
@@ -676,6 +689,7 @@ function normalizeGoalKey(value) {
   if (/mile|1600/.test(s)) return "mile";
   if (/bench|press/.test(s)) return "bench";
   if (/pull/.test(s)) return "pullup";
+  if (/push ?ups?|pushup/.test(s)) return "pushup";
   if (/muscle up|muscleup|\bmu\b/.test(s)) return "mu";
   if (/bodyweight|body weight|weight|lean mass|bulk/.test(s)) return "bw";
   if (/abs|abdominal|physique|six pack|lean/.test(s)) return "abs";
@@ -705,7 +719,7 @@ const CAL_BASELINES = [
   { key: "mile",         label: "Mile baseline", unit: "mm:ss", seed: "5:57", locked: true },
   { key: "fiveK",        label: "5K baseline", unit: "mm:ss", seed: "21:55", locked: true },
   { key: "benchBaseline",label: "Controlled bench baseline (weight × reps)", unit: "e.g. 145 × 5", seed: "" },
-  { key: "pullupMax",    label: "Strict pull-up max", unit: "reps", seed: "15" },
+  { key: "pullupMax",    label: "Strict pull-up max", unit: "reps", seed: "13" },
   { key: "pushupMax",    label: "Push-up max", unit: "reps", seed: "" },
   { key: "exPullHeight", label: "Explosive pull height", unit: "e.g. mid-chest to bar", seed: "" },
   { key: "trackLaps",    label: "Track laps per mile", unit: "laps", seed: "" },
@@ -724,7 +738,7 @@ const EXERCISE_CREDITS = {
   hammer: ["biceps"], incCurl: ["biceps"], pressdown: ["triceps"], ohTri: ["triceps"],
   kneeRaise: ["coreMobility"], pallof: ["coreMobility"], abWheel: ["coreMobility"],
   rdl: ["lowerAthletic"], hipThrust: ["lowerAthletic"], hamCurl: ["lowerAthletic"], stepUp: ["lowerAthletic"],
-  farmer: ["athleticMicrodose"], ssRdl: ["athleticMicrodose"], calfRaise: ["athleticMicrodose"], tibRaise: ["athleticMicrodose"], bandWalk: ["athleticMicrodose"],
+  farmer: ["athleticMicrodose"], sledPush: ["athleticMicrodose"], ssRdl: ["athleticMicrodose"], calfRaise: ["athleticMicrodose"], tibRaise: ["athleticMicrodose"], legExt: ["athleticMicrodose"], bandWalk: ["athleticMicrodose"],
   easyAerobic20: ["easyRun"],
 };
 
@@ -1383,33 +1397,35 @@ const PR5_STIMULI = {
   easyAerobic:     { label: "Easy aerobic", family: "easy", min: 1, max: 2 },
   explosivePull:   { label: "Explosive pull / MU", family: "upper", min: 1, max: 2 },
   verticalPower:   { label: "Jump / vertical development", family: "lower", min: 0, max: 2 },
+  fieldConditioning:{ label: "Coach-style training", family: "mixed", min: 0, max: 2 },
   arms:            { label: "Direct arms", family: "accessory", min: 0, max: 2, optional: true },
   core:            { label: "Core / trunk", family: "accessory", min: 1, max: 3 },
   recovery:        { label: "Low-stress recovery", family: "recovery", min: 1, max: 1 },
 };
 
 const PR5_GOAL_MAP = {
-  bench:    { pressStrength: 1.55, horizontalPull: .25, core: .15 },
+  bench:    { pressStrength: 1.55, horizontalPull: .25, fieldConditioning: .20, core: .15 },
   mile:     { qualityRun: 1.15, easyAerobic: .55, lowerStrength: .25, verticalPower: .30 },
   fiveK:    { qualityRun: 1.20, easyAerobic: .85, lowerStrength: .20 },
-  pullup:   { verticalPull: 1.35, horizontalPull: .25, core: .10 },
+  pullup:   { verticalPull: 1.35, horizontalPull: .25, fieldConditioning: .12, core: .10 },
+  pushup:   { pressStrength: 1.15, fieldConditioning: .32, core: .28, arms: .18 },
   mu:       { explosivePull: 1.45, verticalPull: .65, core: .15 },
   bw:       { pressStrength: .20, verticalPull: .20, horizontalPull: .20, lowerStrength: .20, arms: .20 },
-  abs:      { core: .90, easyAerobic: .20, pressStrength: .10, verticalPull: .10 },
-  speed:    { verticalPower: 1.00, lowerStrength: .50, qualityRun: .45, core: .15 },
-  vertical: { verticalPower: 1.55, lowerStrength: .65, core: .20 },
+  abs:      { core: .90, fieldConditioning: .24, easyAerobic: .20, pressStrength: .10, verticalPull: .10 },
+  speed:    { fieldConditioning: 1.10, verticalPower: 1.00, lowerStrength: .50, qualityRun: .45, core: .20 },
+  vertical: { verticalPower: 1.55, lowerStrength: .65, fieldConditioning: .45, core: .20 },
 };
 
 const PR5_IMPORTANCE = {
-  bench: 1.05, mile: 1.08, fiveK: 1.12, pullup: .95, mu: 1.0,
+  bench: 1.05, mile: 1.08, fiveK: 1.12, pullup: .95, pushup: .72, mu: 1.0,
   bw: .58, abs: .55, speed: .78, vertical: .92,
 };
 
 const PR5_PHASE_MULT = {
-  sep: { pressStrength: .95, verticalPull: 1.0, horizontalPull: .90, lowerStrength: .95, qualityRun: 1.0, easyAerobic: 1.08, explosivePull: .92, verticalPower: .86, arms: .72, core: .95 },
-  oct: { pressStrength: 1.0, verticalPull: 1.0, horizontalPull: .92, lowerStrength: 1.0, qualityRun: 1.05, easyAerobic: .95, explosivePull: 1.05, verticalPower: 1.0, arms: .78, core: .92 },
-  nov: { pressStrength: 1.08, verticalPull: 1.02, horizontalPull: .88, lowerStrength: .92, qualityRun: 1.12, easyAerobic: .82, explosivePull: 1.14, verticalPower: 1.08, arms: .65, core: .85 },
-  dec: { pressStrength: .84, verticalPull: .80, horizontalPull: .62, lowerStrength: .62, qualityRun: .90, easyAerobic: .58, explosivePull: .90, verticalPower: .72, arms: .32, core: .55 },
+  sep: { pressStrength: .95, verticalPull: 1.0, horizontalPull: .90, lowerStrength: .95, qualityRun: 1.0, easyAerobic: 1.08, explosivePull: .92, verticalPower: .86, fieldConditioning: .90, arms: .72, core: .95 },
+  oct: { pressStrength: 1.0, verticalPull: 1.0, horizontalPull: .92, lowerStrength: 1.0, qualityRun: 1.05, easyAerobic: .95, explosivePull: 1.05, verticalPower: 1.0, fieldConditioning: 1.08, arms: .78, core: .92 },
+  nov: { pressStrength: 1.08, verticalPull: 1.02, horizontalPull: .88, lowerStrength: .92, qualityRun: 1.12, easyAerobic: .82, explosivePull: 1.14, verticalPower: 1.08, fieldConditioning: 1.12, arms: .65, core: .85 },
+  dec: { pressStrength: .84, verticalPull: .80, horizontalPull: .62, lowerStrength: .62, qualityRun: .90, easyAerobic: .58, explosivePull: .90, verticalPower: .72, fieldConditioning: .82, arms: .32, core: .55 },
   post: {},
 };
 
@@ -1422,6 +1438,7 @@ const PR5_STIMULUS_RULES = {
   easyAerobic: { keep: .32, build: .76 },
   explosivePull: { keep: .31, build: .68, hard: true },
   verticalPower: { keep: .28, build: .62 },
+  fieldConditioning: { keep: .30, build: .66, hard: true },
   arms: { keep: .44, build: .82, optional: true },
   core: { keep: .38, build: .78 },
 };
@@ -1431,8 +1448,9 @@ const PR5_EXERCISE_STIMULI = {
   pullup: ["verticalPull"], pulldown: ["verticalPull"],
   csRow: ["horizontalPull"], cableRow1: ["horizontalPull"], facePull: ["horizontalPull"],
   exPull: ["explosivePull", "verticalPull"], muTrans: ["explosivePull"],
-  rdl: ["lowerStrength"], hipThrust: ["lowerStrength"], hamCurl: ["lowerStrength"], stepUp: ["lowerStrength"], ssRdl: ["lowerStrength"],
-  snapDown: ["verticalPower"], lowPogo: ["verticalPower"], broadJumpDrill: ["verticalPower"], jumpReach: ["verticalPower"],
+  rdl: ["lowerStrength"], hipThrust: ["lowerStrength"], hamCurl: ["lowerStrength"], stepUp: ["lowerStrength"], legExt: ["lowerStrength"], ssRdl: ["lowerStrength"], splitSquat: ["lowerStrength"],
+  snapDown: ["verticalPower"], lowPogo: ["verticalPower"], broadJumpDrill: ["verticalPower"], jumpReach: ["verticalPower"], sledPush: ["verticalPower", "lowerStrength", "fieldConditioning"],
+  battleRope: ["fieldConditioning"], ballSlam: ["fieldConditioning", "core"], medBallMtClimber: ["fieldConditioning", "core"], trapBarJump: ["fieldConditioning", "verticalPower"], landminePress: ["fieldConditioning", "pressStrength"], walkingLungeSlam: ["fieldConditioning", "lowerStrength"], boxJump: ["fieldConditioning", "verticalPower"], trxRow: ["fieldConditioning", "horizontalPull"],
   hammer: ["arms"], incCurl: ["arms"], pressdown: ["arms"], ohTri: ["arms"],
   kneeRaise: ["core"], pallof: ["core"], abWheel: ["core"], farmer: ["core"], microRun: ["qualityRun"], easyAerobic20: ["easyAerobic"],
 };
@@ -1440,8 +1458,9 @@ const PR5_EXERCISE_STIMULI = {
 const PR5_EXERCISE_AREAS = {
   benchA:["chest","shoulders","triceps"], benchC:["chest","shoulders","triceps"], inclineDb:["chest","shoulders","triceps"], ohp:["shoulders","triceps"], pushup:["chest","triceps"], mbThrow:["chest","shoulders","triceps"],
   pullup:["back","biceps"], pulldown:["back","biceps"], csRow:["back","biceps"], cableRow1:["back","biceps"], facePull:["back","shoulders"], exPull:["back","biceps"], muTrans:["back","biceps"],
-  rdl:["hamstrings","glutes"], hipThrust:["glutes","hamstrings"], hamCurl:["hamstrings"], stepUp:["quads","glutes"], ssRdl:["hamstrings","glutes"],
-  snapDown:["quads","glutes","calves"], lowPogo:["calves"], broadJumpDrill:["quads","glutes","hamstrings","calves"], jumpReach:["quads","glutes","calves"],
+  rdl:["hamstrings","glutes"], hipThrust:["glutes","hamstrings"], hamCurl:["hamstrings"], stepUp:["quads","glutes"], legExt:["quads"], ssRdl:["hamstrings","glutes"], splitSquat:["quads","glutes"],
+  snapDown:["quads","glutes","calves"], lowPogo:["calves"], broadJumpDrill:["quads","glutes","hamstrings","calves"], jumpReach:["quads","glutes","calves"], sledPush:["quads","glutes","calves"],
+  battleRope:["shoulders","core"], ballSlam:["shoulders","core","quads","glutes"], medBallMtClimber:["shoulders","core"], trapBarJump:["quads","glutes","hamstrings","calves"], landminePress:["shoulders","triceps","core"], walkingLungeSlam:["quads","glutes","shoulders","core"], boxJump:["quads","glutes","calves"], trxRow:["back","biceps","core"],
   hammer:["biceps"], incCurl:["biceps"], pressdown:["triceps"], ohTri:["triceps"], kneeRaise:["core"], pallof:["core"], abWheel:["core"], farmer:["core"], microRun:["quads","hamstrings","glutes","calves"], easyAerobic20:["quads","hamstrings","glutes","calves"],
 };
 
@@ -1496,7 +1515,11 @@ function pr5GoalProgressDetail(state, key, today) {
   }
   if (key === "pullup") {
     const arr = met.pullupBest || []; const cur = arr.length ? Number(arr[arr.length - 1].v) : Number(cal.pullupMax || 15); const target = (ov.pullup && ov.pullup.targetVal) || 20;
-    return finish((cur - 15) / Math.max(1, target - 15), Number.isFinite(cur));
+    const start = 13; return finish((cur - start) / Math.max(1, target - start), Number.isFinite(cur));
+  }
+  if (key === "pushup") {
+    const arr = met.pushupBest || []; const cur = arr.length ? Number(arr[arr.length - 1].v) : Number(cal.pushupMax || 33); const target = (ov.pushup && ov.pushup.targetVal) || 100;
+    return finish((cur - 33) / Math.max(1, target - 33), Number.isFinite(cur));
   }
   if (key === "mu") return finish(met.muscleUp ? 1 : 0, true);
   if (key === "bw") {
@@ -1512,7 +1535,7 @@ function pr5GoalProgress(state, key, today) {
   return pr5GoalProgressDetail(state, key, today || SEP_START).progress;
 }
 function pr5GoalUrgencies(state, today) {
-  const performanceKeys = new Set(["bench","mile","fiveK","pullup","mu","speed","vertical"]);
+  const performanceKeys = new Set(["bench","mile","fiveK","pullup","pushup","mu","speed","vertical"]);
   return pr5ActiveGoals(state).map((g) => {
     const detail = pr5GoalProgressDetail(state, g.key, today);
     const priority = Number(((state.goalOverrides || {})[g.key] || {}).priority || 1);
@@ -1581,6 +1604,7 @@ function pr5DerivedBudget(state, today) {
   add("easyAerobic", "Aerobic base, recovery support and body-composition engine.");
   add("explosivePull", "Muscle-up skill and pulling power, managed around local fatigue.");
   add("verticalPower", stage >= 3 ? "Vertical/dunk power dose only after knee stages earn it." : "Vertical/dunk foundation: landing, ankle/calf and hip capacity before aggressive jumping.");
+  add("fieldConditioning", "Cornerback-style mixed power/conditioning: sleds, ropes, ball slams, jumps, carries and trunk under fatigue.");
   add("arms", "Optional physique/support work; it rides along only when recovery and time allow.");
   add("core", "Trunk stiffness for sprinting, jumping, running and lifting.");
   const hardTargets = rows.filter((r) => (PR5_STIMULUS_RULES[r.key] || {}).hard).reduce((sum, r) => sum + r.target, 0);
@@ -1594,7 +1618,7 @@ function pr5CreditsFromExercises(ids) {
   const out = {};
   const set = new Set(ids || []);
   set.forEach((id) => (PR5_EXERCISE_STIMULI[id] || []).forEach((k) => { out[k] = 1; }));
-  const foundation = ["calfRaise","tibRaise","bandWalk","stepUp"].filter((id) => set.has(id));
+  const foundation = ["calfRaise","tibRaise","legExt","bandWalk","stepUp","sledPush"].filter((id) => set.has(id));
   if (foundation.length >= 2) out.verticalPower = Math.max(out.verticalPower || 0, 1);
   return out;
 }
@@ -1647,6 +1671,7 @@ const PR5_MODULES = {
   explosivePull: { key:"explosivePull", label:"Explosive pull + muscle-up", family:"upper", minutes:9, range:"8–18", hard:true, areas:["back","biceps"] },
   lowerStrength: { key:"lowerStrength", label:"Lower force", family:"lower", minutes:22, range:"12–30", hard:true, areas:["hamstrings","glutes","quads"] },
   verticalPower: { key:"verticalPower", label:"Vertical / jump development", family:"lower", minutes:9, range:"8–18", hard:false, areas:["quads","glutes","calves"] },
+  fieldConditioning: { key:"fieldConditioning", label:"Coach-style training circuit", family:"mixed", minutes:12, range:"10–35", hard:true, areas:["quads","glutes","hamstrings","calves","shoulders","core"] },
   arms: { key:"arms", label:"Arms", family:"accessory", minutes:7, range:"6–16", hard:false, areas:["biceps","triceps"] },
   core: { key:"core", label:"Core", family:"accessory", minutes:7, range:"6–14", hard:false, areas:["core"] },
   easyAerobic: { key:"easyAerobic", label:"Easy aerobic", family:"easy", minutes:18, range:"15–35", hard:false, areas:["quads","hamstrings","glutes","calves"] },
@@ -1657,8 +1682,13 @@ const PR5_EXERCISE_ALIASES = {
   ohp:["overhead press","shoulder press"], pushup:["push-up","push ups","pushups"], mbThrow:["medicine ball throw","med ball throw","chest throw"],
   pullup:["pull-up","pull ups","pullups"], pulldown:["lat pulldown","pulldown"], csRow:["row","db row","chest supported row"], cableRow1:["cable row","1 arm row"], facePull:["face pull"],
   exPull:["explosive pull-up","explosive pullup"], muTrans:["muscle-up","muscle up","transition"],
-  rdl:["romanian deadlift","hinge"], hipThrust:["hip thrust","glute bridge"], hamCurl:["hamstring curl"], stepUp:["step-up","spanish squat"], ssRdl:["split stance rdl"],
+  rdl:["romanian deadlift","hinge"], hipThrust:["hip thrust","glute bridge"], hamCurl:["hamstring curl"], stepUp:["step-up","spanish squat"], legExt:["leg extension"], ssRdl:["split stance rdl"],
+  splitSquat:["split squat","split squats"],
   calfRaise:["calf raise"], tibRaise:["tibialis raise","tib raise"], bandWalk:["band walk","lateral band walk"],
+  sledPush:["sled","sled push","sled drag"],
+  battleRope:["battle ropes","rope flips","rope waves"], ballSlam:["ball slam","medicine ball slam","med ball slam"], medBallMtClimber:["mountain climber","medicine ball mountain climber","ball mountain climber"],
+  trapBarJump:["trap bar jump","trapbar jump"], landminePress:["landmine press","landmine shoulder press","one shoulder quick press","one shoulder press"], walkingLungeSlam:["walking lunge slam","lunges while slamming","lunge med ball slam"],
+  boxJump:["box jump","box jumps"], trxRow:["trx row","trx low row"],
   latRaise:["lateral raise","lateral raises","side raise"], hammer:["hammer curl"], incCurl:["incline curl"], pressdown:["pressdown","triceps pressdown"], ohTri:["overhead triceps"],
   kneeRaise:["knee raise"], pallof:["pallof"], abWheel:["ab wheel","dead bug"], farmer:["farmer carry"], easyAerobic20:["easy aerobic","cardio","zone 2"],
 };
@@ -1669,6 +1699,8 @@ const PR5_MODULE_VARIANTS = {
     { id:"bench_strength", label:"heavy bench anchor", minMinutes:20, rows:[["benchA","4 × 5–6","primary strength work · RPE 7–8"],["inclineDb","2 × 8–10","secondary chest only if recovered"]] },
     { id:"chest_volume", label:"chest volume", minMinutes:25, rows:[["benchC","3 × 6–8","smooth volume · never grind"],["inclineDb","3 × 8–10","controlled chest work"],["pushup","2 × near-clean-stop","stop 2 reps before form fades"]] },
     { id:"press_power", label:"speed / power press", minMinutes:20, rows:[["mbThrow","4 × 3","violent chest pass · full reset"],["benchC","4 × 3","fast bar speed · 60–70%"],["pushup","2 × 8–12","explosive but clean"]] },
+    { id:"coach_chest_training", label:"coach-style chest training", minMinutes:30, rows:[["mbThrow","4 × 3","explosive chest pass · full reset"],["benchA","3 × 5","strong but clean"],["inclineDb","3 × 8–10","chest specialization"],["pushup","3 × 10–20","finish crisp under fatigue"]] },
+    { id:"chest_sweat_circuit", label:"chest + sweat circuit", minMinutes:35, rows:[["benchC","4 × 4","fast press"],["inclineDb","3 × 8","chest volume"],["battleRope","4 × 30 s","conditioning between press blocks"],["pushup","2 × clean stop","upper endurance"]] },
     { id:"triceps_supported_press", label:"press + triceps", minMinutes:20, rows:[["benchA","3 × 5","strength touch"],["pressdown","3 × 10–12","triceps support for lockout"]] },
     { id:"shoulder_supported_press", label:"shoulder-supported press", minMinutes:25, rows:[["ohp","3 × 8–10","shoulder strength without chasing max load"],["pushup","3 × 8–15","chest/triceps volume"]] },
   ],
@@ -1694,6 +1726,15 @@ const PR5_MODULE_VARIANTS = {
     { id:"hinge_force", label:"hinge force", minMinutes:16, rows:[["rdl","3 × 6–8","primary hinge"],["hipThrust","3 × 8–10","hip extension"],["hamCurl","2 × 10–12","hamstrings"]] },
     { id:"glute_ham", label:"glute / hamstring strength", minMinutes:20, rows:[["hipThrust","4 × 6–8","hard hip extension"],["hamCurl","3 × 10–12","hamstrings"],["ssRdl","2 × 8/side","unilateral hinge"]] },
     { id:"knee_safe_lower", label:"knee-aware lower", minMinutes:15, kneeSafe:true, rows:[["hipThrust","3 × 8–10","low-knee-stress force"],["ssRdl","2 × 8/side","controlled unilateral hinge"],["stepUp","2 × 8/side","pain-free range only"]] },
+    { id:"sled_power", label:"sled leg power", minMinutes:16, kneeSafe:true, rows:[["sledPush","6–8 hard pushes","powerful drive · full recovery"],["hamCurl","2 × 8–10","hamstring support"],["legExt","2 × 8–10","quad support · stop before grind"]] },
+  ],
+  fieldConditioning: [
+    { id:"short_field_sweat", label:"short coached sweat", maxMinutes:15, upperFriendly:true, lowerFriendly:true, rows:[["battleRope","4 × 30 s","fast hands · 45–60 s rest"],["ballSlam","3 × 10","violent but crisp"],["trxRow","2 × 10–12","upper-back pump"]] },
+    { id:"core_explosive_training", label:"core + explosive training", minMinutes:18, upperFriendly:true, lowerFriendly:true, rows:[["medBallMtClimber","3 × 30 s","shoulders and trunk under breath"],["ballSlam","4 × 10","violent trunk extension"],["battleRope","4 × 30 s","fast hands"],["farmer","3 × 30 s","brace and carry"]] },
+    { id:"chest_athletic_training", label:"chest athletic circuit", minMinutes:22, upperFriendly:true, rows:[["mbThrow","4 × 3","explosive chest power"],["pushup","4 × 10–20","clean endurance"],["battleRope","4 × 30 s","upper-body conditioning"],["trxRow","3 × 12","balance the pressing"]] },
+    { id:"coach_sheet_power_circuit", label:"coach-sheet power circuit", minMinutes:20, lowerFriendly:true, kneeSafe:true, rows:[["sledPush","5–6 hard turf pushes","powerful drive · full recovery"],["battleRope","4 × 45–60 s","conditioning without jogging"],["landminePress","3 × 8/side","one-shoulder upward drive"],["ballSlam","3 × 12–15","explosive finish"]] },
+    { id:"lunge_slam_engine", label:"lunge + slam engine", minMinutes:20, lowerFriendly:true, rows:[["walkingLungeSlam","3 turf lengths","athletic posture · controlled knee"],["medBallMtClimber","3 × 30 s","shoulders + trunk under breath"],["pushup","3 × 10–15","quality reps under fatigue"],["farmer","3 × 30 s","brace and carry"]] },
+    { id:"jump_row_circuit", label:"jump + row circuit", minMinutes:25, lowerFriendly:true, rows:[["trapBarJump","3 × 8–10","light and fast"],["boxJump","4 × 5","stick landings"],["trxRow","3 × 12","bodyweight row"],["ballSlam","3 × 10","reset between reps"]] },
   ],
   arms: [
     { id:"short_arms", label:"short arms microdose", maxMinutes:15, rows:[["hammer","2 × 10–12","clean reps"],["pressdown","2 × 10–12","clean reps"]] },
@@ -1718,6 +1759,7 @@ function pr5LegacyModuleRows(key, minutes, stage) {
   if (key === "horizontalPull") return [["csRow", minutes <= 25 ? "2 × 8–10" : "3 × 8–10","controlled horizontal pull"]];
   if (key === "explosivePull") return minutes <= 25 ? [["exPull","3 × 3","fast, crisp reps"]] : [["exPull","4 × 3","full intent while fresh"],["muTrans","3 × 3","skill, never sloppy failure"]];
   if (key === "lowerStrength") return minutes <= 25 ? [["rdl","3 × 6–8","clean hinge"],["hipThrust","2 × 8–10","strong hip extension"]] : [["rdl","3 × 6–8","primary hinge"],["hipThrust","3 × 8–10","hip extension"],["hamCurl","2 × 10–12","hamstrings"]];
+  if (key === "fieldConditioning") return minutes <= 15 ? [["battleRope","4 × 30 s","fast hands"],["ballSlam","3 × 10","violent but crisp"]] : [["sledPush","5–6 hard turf pushes","powerful drive"],["battleRope","4 × 45–60 s","conditioning without jogging"],["ballSlam","3 × 12–15","explosive finish"]];
   if (key === "verticalPower") {
     if (stage <= 1) return [["calfRaise","2 × 12–15","jump foundation"],["tibRaise","2 × 15–20","ankle capacity"],["bandWalk","2 × 10/side","hip stability"]];
     if (stage === 2) return [["snapDown","3 × 3","stick every landing"],["lowPogo","3 × 10","low contacts · skill, not conditioning"]];
@@ -1733,10 +1775,12 @@ function pr5LegacyModuleRows(key, minutes, stage) {
 function pr5VerticalPowerVariants(stage) {
   if (stage <= 1) return [
     { id:"jump_foundation", label:"ankle / hip foundation", rows:[["calfRaise","2 × 12–15","jump foundation"],["tibRaise","2 × 15–20","ankle capacity"],["bandWalk","2 × 10/side","hip stability"]] },
-    { id:"quiet_knee_foundation", label:"knee-quiet foundation", kneeSafe:true, rows:[["hipThrust","2 × 8–10","hip power base"],["calfRaise","2 × 12–15","calf capacity"],["tibRaise","2 × 15–20","shin capacity"]] },
+    { id:"quiet_knee_foundation", label:"knee-quiet foundation", kneeSafe:true, rows:[["hipThrust","2 × 8–10","hip power base"],["calfRaise","2 × 12–15","calf capacity"],["legExt","2 × 8–10","quad support if tibialis setup is unavailable"]] },
+    { id:"sled_foundation", label:"sled power foundation", kneeSafe:true, rows:[["sledPush","6 × 10–20 yd","powerful drive · stop before form slows"],["calfRaise","2 × 12–15","calf capacity"]] },
   ];
   if (stage === 2) return [
     { id:"landing_skill", label:"landing skill", rows:[["snapDown","3 × 3","stick every landing"],["lowPogo","3 × 10","low contacts · skill, not conditioning"]] },
+    { id:"sled_accel_power", label:"sled acceleration power", kneeSafe:true, rows:[["sledPush","6–8 × 10–20 yd","hard drive · full recovery"],["snapDown","2 × 3","own the landing"]] },
     { id:"ankle_elastic", label:"ankle elasticity", rows:[["lowPogo","4 × 8","quiet contacts"],["calfRaise","2 × 12–15","capacity back-off"]] },
   ];
   if (stage === 3) return [
@@ -1767,7 +1811,10 @@ function pr5AvoidedExerciseIds(state) {
   facts.forEach(function (f) {
     var key = pr5NormalizeText(f && f.key);
     var text = pr5NormalizeText(f && f.text);
-    if (!/(avoid|hate|dislike|do not like|dont like|irritat|hurt|pain|remove)/.test(text + " " + key)) return;
+    var blob = text + " " + key;
+    var preferenceAvoid = /(avoid|hate|dislike|do not like|dont like|irritat|hurt|pain|remove)/.test(blob);
+    var unavailable = /(unavailable|not available|does not have|doesnt have|do not have|dont have|no gym has|no setup|without|no )/.test(blob);
+    if (!preferenceAvoid && !unavailable) return;
     Object.keys(EXERCISE_DEFAULTS).forEach(function (id) {
       if (key === "avoid " + pr5NormalizeText(id) || pr5ExerciseTerms(id).some(function (term) { return text.indexOf(term) >= 0; })) out.add(id);
     });
@@ -1798,6 +1845,15 @@ function pr5PickModuleVariant(key, minutes, stage, state, dateStr, context) {
     return minutes >= (v.minMinutes || 0) && minutes <= (v.maxMinutes || 999);
   });
   if (!candidates.length) candidates = variants;
+  if (key === "fieldConditioning" && context && Array.isArray(context.modules)) {
+    var mods = context.modules;
+    var hasUpperIntent = mods.some(function (k) { return ["pressStrength","verticalPull","horizontalPull","explosivePull"].indexOf(k) >= 0; });
+    var hasLowerIntent = mods.some(function (k) { return ["lowerStrength"].indexOf(k) >= 0; });
+    var contextual = null;
+    if (hasUpperIntent && !hasLowerIntent) contextual = candidates.filter(function (v) { return v.upperFriendly; });
+    else if (hasLowerIntent) contextual = candidates.filter(function (v) { return v.lowerFriendly; });
+    if (contextual && contextual.length) candidates = contextual;
+  }
   var knee = (state && state.settings && state.settings.knee) || "";
   var kneeSafe = candidates.filter(function (v) { return v.kneeSafe; });
   if ((knee === "watch" || knee === "irritated") && kneeSafe.length) candidates = kneeSafe;
@@ -1810,11 +1866,28 @@ function pr5PickModuleVariant(key, minutes, stage, state, dateStr, context) {
 }
 function pr5ModuleRows(key, minutes, stage, state, dateStr, context) {
   if (!state && !dateStr && !context) return pr5LegacyModuleRows(key, minutes, stage);
+  if (context && Array.isArray(context.modules) && key === "verticalPower") {
+    var hasUpperIntent = context.modules.some(function (k) { return ["pressStrength","verticalPull","horizontalPull","explosivePull"].indexOf(k) >= 0; });
+    var hasLowerIntent = context.modules.indexOf("lowerStrength") >= 0;
+    if (hasUpperIntent && !hasLowerIntent) {
+      var touchRows = stage <= 1
+        ? [["calfRaise","2 × 12–15","tiny lower-power touch"],["bandWalk","2 × 10/side","hip stability touch"]]
+        : [["snapDown","3 × 3","tiny landing touch"],["lowPogo","2 × 8","quiet contacts only"]];
+      return pr5RowsRespectingMemory(pr5CapRowsForMinutes(touchRows, minutes), state);
+    }
+  }
   var picked = pr5PickModuleVariant(key, minutes, stage, state, dateStr, context);
   return picked ? picked.rows : pr5RowsRespectingMemory(pr5CapRowsForMinutes(pr5LegacyModuleRows(key, minutes, stage), minutes), state);
 }
 function pr5ModuleLabel(key) {
   return (PR5_STIMULI[key] && PR5_STIMULI[key].label) || (PR5_MODULES[key] && PR5_MODULES[key].label) || key;
+}
+function pr5WantsCoachTraining(state) {
+  const facts = (((state && state.trainerMemory) || {}).facts) || [];
+  return facts.some(function (f) {
+    const blob = pr5NormalizeText((f && f.key) + " " + (f && f.text));
+    return /(coach style|cornerback|field conditioning|training circuit|sled|battle rope|ball slam|explosive|conditioning)/.test(blob);
+  });
 }
 function pr5GoalKeysForModules(modules, limit, state) {
   var score = {};
@@ -1876,7 +1949,8 @@ function pr5EntryFamily(entry) {
   const ids = new Set(entry.exercisesCompleted || []);
   if (ids.has("microRun")) return "runHard";
   if (ids.has("easyAerobic20")) return "easy";
-  if (["rdl","hipThrust","hamCurl","stepUp","ssRdl","snapDown","lowPogo","broadJumpDrill","jumpReach","calfRaise","tibRaise","bandWalk"].some((x) => ids.has(x))) return "lower";
+  if (["battleRope","ballSlam","medBallMtClimber","walkingLungeSlam","trapBarJump","boxJump","sledPush"].some((x) => ids.has(x))) return "mixed";
+  if (["rdl","hipThrust","hamCurl","stepUp","ssRdl","splitSquat","snapDown","lowPogo","broadJumpDrill","jumpReach","calfRaise","tibRaise","legExt","bandWalk"].some((x) => ids.has(x))) return "lower";
   if (["benchA","benchC","pullup","csRow","pulldown","cableRow1","exPull","muTrans","inclineDb","ohp","pushup","mbThrow","hammer","incCurl","pressdown","ohTri","latRaise"].some((x) => ids.has(x))) return "upper";
   const slot2 = SLOT_OF[entry.sessionId]; return slot2 === "B" || slot2 === "D" ? "lower" : (slot2 === "A" || slot2 === "C" ? "upper" : null);
 }
@@ -1917,14 +1991,17 @@ function pr5ModuleEligible(mod, d, state, prevMeta, log) {
   if (mod.hard && sys >= 2) return false;
   if (maxAreaFatigue(state.fatigue, mod.areas || [], d) >= 2) return false;
   if (mod.hard && pr5RecentAreaLoad(log || state.log || [], mod.areas || [], d) >= 2) return false;
-  if (prevMeta && prevMeta.hard && mod.hard && pr5Overlap(prevMeta.areas, mod.areas)) return false;
+  if (prevMeta && prevMeta.hard && mod.hard && pr5Overlap(prevMeta.areas, mod.areas)) {
+    const coachCircuitException = mod.key === "fieldConditioning" && prevMeta.family !== "mixed" && prevMeta.family !== "runHard";
+    if (!coachCircuitException) return false;
+  }
   if (mod.family === "lower" && prevMeta && prevMeta.family === "runHard") return false;
   if (mod.family === "upper" && prevMeta && prevMeta.family === "upper" && prevMeta.hard) return false;
   if (mod.key === "verticalPower" && state.settings.knee === "irritated") return false;
   return true;
 }
 function pr5BuildStrengthDay(d, available, budget, projected, state, prevMeta, log) {
-  const primaryKeys = ["pressStrength","verticalPull","horizontalPull","explosivePull","lowerStrength","verticalPower"];
+  const primaryKeys = ["pressStrength","verticalPull","horizontalPull","explosivePull","lowerStrength","verticalPower","fieldConditioning"];
   const candidates = primaryKeys.map((key) => ({ mod: PR5_MODULES[key], rank: pr5ModuleRank(key,budget,projected) }))
     .filter((x) => x.rank > 0 && pr5ModuleEligible(x.mod,d,state,prevMeta,log)).sort((a,b) => b.rank-a.rank);
   const accessoryCandidates = ["core","arms"].map((key) => ({ mod: PR5_MODULES[key], rank: pr5ModuleRank(key,budget,projected) }))
@@ -1934,12 +2011,31 @@ function pr5BuildStrengthDay(d, available, budget, projected, state, prevMeta, l
   if (candidates.length) {
     const first = candidates[0].mod; family = first.family; chosen.push(first); used = first.minutes;
     candidates.slice(1).forEach((x) => {
-      if (x.mod.family !== family || used + x.mod.minutes > available) return;
+      const sameFamily = x.mod.family === family;
+      const fieldCanAttach = x.mod.key === "fieldConditioning" && ["upper","lower"].includes(family);
+      const mixedCanCarry = family === "mixed" && ["lowerStrength","verticalPower","horizontalPull","core"].includes(x.mod.key);
+      if ((!sameFamily && !fieldCanAttach && !mixedCanCarry) || used + x.mod.minutes > available) return;
       chosen.push(x.mod); used += x.mod.minutes;
     });
   } else {
     accessoryCandidates.forEach((x) => {
       if (!chosen.length || used + x.mod.minutes <= available) { chosen.push(x.mod); used += x.mod.minutes; }
+    });
+  }
+  if (pr5WantsCoachTraining(state) && !chosen.some((m) => m.key === "fieldConditioning")) {
+    const field = PR5_MODULES.fieldConditioning;
+    if (field && family !== "easy" && family !== "runHard" && available >= 35 && used + field.minutes <= available && pr5ModuleEligible(field,d,state,prevMeta,log)) {
+      chosen.push(field); used += field.minutes;
+    }
+  }
+  if (pr5WantsCoachTraining(state) && available >= 45) {
+    const touchKeys = family === "upper" ? ["verticalPower"] : family === "lower" ? ["horizontalPull"] : [];
+    touchKeys.forEach((key) => {
+      if (chosen.some((m) => m.key === key)) return;
+      const m = PR5_MODULES[key];
+      if (!m || used + m.minutes > available) return;
+      if (key === "verticalPower" && state.settings.knee !== "good") return;
+      if (pr5ModuleEligible(m,d,state,prevMeta,log)) { chosen.push(m); used += m.minutes; }
     });
   }
   ["core","arms"].forEach((key) => {
@@ -1960,17 +2056,73 @@ function pr5BuildStrengthDay(d, available, budget, projected, state, prevMeta, l
   const moduleKeys = chosen.map((m)=>m.key);
   chosen.forEach((m) => pr5ModuleRows(m.key, moduleMinutes, stage, state, d, { modules: moduleKeys, variantSalt: family }).forEach((r) => { if (!seen.has(r[0])) { seen.add(r[0]); rows.push(r); } }));
   if (!rows.length) return null;
-  let carrier = family === "lower" ? (state.settings.knee === "irritated" ? "BSAFE" : "B") : family === "accessory" ? "D" : (chosen.some((m)=>m.key==="pressStrength") ? "A" : "C");
+  let carrier = family === "lower" ? (state.settings.knee === "irritated" ? "BSAFE" : "B") : (family === "accessory" || family === "mixed") ? "D" : (chosen.some((m)=>m.key==="pressStrength") ? "A" : "C");
   if (carrier === "C" && maxAreaFatigue(state.fatigue,["chest","shoulders","triceps"],d) >= 1) carrier="CPULL";
   const labels=chosen.map((m)=>m.label);
   const goalKeys = pr5GoalKeysForModules(moduleKeys, 4, state);
   const focus = budget.focus.map((g)=>g.label).slice(0,2).join(" + ");
+  const rowAreas = Array.from(new Set(rows.flatMap((r)=>PR5_EXERCISE_AREAS[r[0]] || [])));
   return {
-    id:carrier, family, hard:chosen.some((m)=>m.hard), areas:Array.from(new Set(chosen.flatMap((m)=>m.areas||[]))), modules:moduleKeys, goalKeys,
-    displayName:"Adaptive Session — " + labels.slice(0,3).join(" + "), displayShort:labels.slice(0,2).join(" + "),
+    id:carrier, family, hard:chosen.some((m)=>m.hard), areas:rowAreas.length ? rowAreas : Array.from(new Set(chosen.flatMap((m)=>m.areas||[]))), modules:moduleKeys, goalKeys,
+    displayName:"Adaptive Session — " + labels.slice(0,4).join(" + "), displayShort:labels.slice(0,2).join(" + "),
     displayDesc:"Built from your Dec 31 outcomes, what is still unbanked this week, recovery and today's " + available + "-minute window.",
     reasons:["Goal-driven focus: " + focus + ".","A/B/C are only exercise libraries here — this composition was assembled for today."],
     autoOverride:{ date:d, tier:snapTier(available), availableMinutes:available, remove:pr5CarrierBaseIds(carrier), add:rows.map((r)=>({id:r[0],sr:r[1],note:r[2]})), modules:moduleKeys, reason:"Goal-derived mix · " + labels.join(" + ") },
+  };
+}
+function pr5PinnedIntentModuleKeys(slot, minutes) {
+  const s = slot === "CAL_UP" ? "A" : slot === "CAL_LOW" ? "B" : slot;
+  if (s === "A") return minutes >= 55
+    ? ["pressStrength","verticalPull","horizontalPull","fieldConditioning","verticalPower","core"]
+    : minutes >= 35
+      ? ["pressStrength","fieldConditioning","horizontalPull","core"]
+      : minutes >= 20 ? ["pressStrength","fieldConditioning"] : ["pressStrength"];
+  if (s === "B" || s === "BSAFE") return minutes >= 55
+    ? ["lowerStrength","verticalPower","fieldConditioning","horizontalPull","core"]
+    : minutes >= 35
+      ? ["lowerStrength","fieldConditioning","core"]
+      : minutes >= 20 ? ["lowerStrength","fieldConditioning"] : ["lowerStrength"];
+  if (s === "C" || s === "CPULL") return minutes >= 55
+    ? ["explosivePull","verticalPull","horizontalPull","fieldConditioning","verticalPower","arms"]
+    : minutes >= 35
+      ? ["explosivePull","fieldConditioning","verticalPull","arms"]
+      : minutes >= 20 ? ["explosivePull","fieldConditioning"] : ["explosivePull"];
+  if (s === "D") return minutes >= 35 ? ["fieldConditioning","core","verticalPower"] : ["fieldConditioning","core"];
+  return null;
+}
+function pr5BuildPinnedTrainingDay(d, pinnedSlot, pinnedId, available, budget, state, prevMeta, log) {
+  const slot = SLOT_OF[pinnedId] || pinnedSlot;
+  if (["QR1","QR2","EASY"].includes(slot)) return null;
+  const wanted = pr5PinnedIntentModuleKeys(slot, available);
+  if (!wanted || !wanted.length) return null;
+  const modules = [];
+  wanted.forEach((key) => {
+    const mod = PR5_MODULES[key];
+    if (!mod) return;
+    if (key === "verticalPower" && state.settings.knee !== "good") return;
+    if (!pr5ModuleEligible(mod, d, state, prevMeta, log) && !(key === "fieldConditioning" && pr5WantsCoachTraining(state))) return;
+    modules.push(key);
+  });
+  if (!modules.length) return null;
+  const stage = budget.stage;
+  const moduleMinutes = Math.max(15, Math.floor(available / Math.max(1, modules.length)));
+  const rows=[]; const seen=new Set();
+  modules.forEach((key) => pr5ModuleRows(key, moduleMinutes, stage, state, d, { modules, variantSalt:"pinned-training-" + slot }).forEach((r) => {
+    if (!seen.has(r[0])) { seen.add(r[0]); rows.push(r); }
+  }));
+  if (!rows.length) return null;
+  const labels = modules.map(pr5ModuleLabel);
+  const rowAreas = Array.from(new Set(rows.flatMap((r)=>PR5_EXERCISE_AREAS[r[0]] || [])));
+  return {
+    id:pinnedId, family:modules.includes("fieldConditioning") ? "mixed" : (PR5_MODULES[modules[0]] && PR5_MODULES[modules[0]].family) || "upper",
+    hard:modules.some((k)=>PR5_MODULES[k] && PR5_MODULES[k].hard),
+    areas:rowAreas.length ? rowAreas : Array.from(new Set(modules.flatMap((k)=>PR5_MODULES[k] && PR5_MODULES[k].areas || []))),
+    modules, goalKeys:pr5GoalKeysForModules(modules, 4, state),
+    displayName:"Coached Training — " + labels.slice(0,4).join(" + "),
+    displayShort:"Training · " + labels.slice(0,2).join(" + "),
+    displayDesc:"Pinned intent from chat, rebuilt as a modular coached gym session: strength, core, explosiveness and conditioning in the safest useful mix.",
+    reasons:["Pinned intent: " + (pinnedSlot || slot) + ".","Prescription still adapts like coached training, not a static sheet."],
+    autoOverride:{ date:d, tier:snapTier(available), availableMinutes:available, remove:pr5CarrierBaseIds(pinnedId), add:rows.map((r)=>({id:r[0],sr:r[1],note:r[2]})), modules, reason:"Pinned coached-training intent · " + labels.join(" + ") },
   };
 }
 function pr5RunDay(kind, d, available, budget, projected, state, prevMeta, log) {
@@ -2024,6 +2176,13 @@ function pr5MicroRowsForKey(key, minutes, state, d, constraints) {
     if (knee === "irritated" || (!pr5GoalActive(state, "vertical") && !pr5GoalActive(state, "speed"))) return [];
     return [["snapDown","3 × 3","own the landing"],["calfRaise","2 × 12–15","jump foundation"]];
   }
+  if (key === "fieldConditioning") {
+    if (knee === "irritated" || fatigueLevelAt(state.fatigue,"systemic",d)>=2) return [];
+    if (noGym) return [["pushup","1 clean hard set","upper endurance signal"],["microRun", minutes + " min hard-controlled","coach-style substitute"]];
+    return minutes <= 8
+      ? [["battleRope","4 × 20 s","fast hands · short field sweat"]]
+      : [["battleRope","4 × 30 s","fast hands"],["ballSlam","3 × 8–10","explosive trunk"]];
+  }
   if (key === "arms") return noGym
     ? [["pushup","1 close-grip clean set","triceps microdose"]]
     : [["hammer","2 × 10–12","biceps"],["pressdown","2 × 10–12","triceps"]];
@@ -2036,7 +2195,7 @@ function pr5BuildMicroDay(d, available, budget, projected, state, prevMeta, log)
     .filter((b) => b.key !== "recovery" && pr5Deficit(b, projected) > 0)
     .map((b) => ({ key:b.key, rank:pr5ModuleRank(b.key,budget,projected) + (b.min > Number(projected[b.key] || 0) ? 4 : 0) }))
     .sort((a,b) => b.rank - a.rank);
-  const fallback = ["qualityRun","pressStrength","verticalPull","core","easyAerobic","arms","verticalPower","lowerStrength"];
+  const fallback = ["qualityRun","fieldConditioning","pressStrength","verticalPull","core","easyAerobic","arms","verticalPower","lowerStrength"];
   const keys = primary.length ? primary.map((x)=>x.key) : fallback;
   for (const key of keys.concat(fallback)) {
     if (key === "recovery") continue;
@@ -2069,7 +2228,7 @@ function pr5BuildSupportDay(d, available, budget, projected, state, prevMeta, lo
     ["easyAerobic","core"],
     ["arms","core"],
     ["verticalPower","core"],
-    ["easyAerobic","arms"],
+    ["fieldConditioning","core"],
   ][pr5Hash(d) % 4];
   const chosen=[]; let used=0;
   rotation.forEach((key) => {
@@ -2110,7 +2269,18 @@ function goalDrivenPlanWeek(ctx) {
   const days=[]; let consecutive=0; let recoveryPlaced=(done.recovery||0)>0;
   const avail=(d)=>pr5AvailabilityForDate(settings,state,d);
   const row=(k)=>budgetDef.find((b)=>b.key===k); const gap=(k)=>row(k)?pr5Deficit(row(k),projected):0;
-  const actualMeta=(e)=>({ family:pr5EntryFamily(e), areas:pr5AreasFromEntry(e), hard:(pr5EntryFamily(e)==="upper"||pr5EntryFamily(e)==="lower"||pr5EntryFamily(e)==="runHard") });
+  const actualMeta=(e)=>({ family:pr5EntryFamily(e), areas:pr5AreasFromEntry(e), hard:(pr5EntryFamily(e)==="upper"||pr5EntryFamily(e)==="lower"||pr5EntryFamily(e)==="runHard"||pr5EntryFamily(e)==="mixed") });
+  const pinnedIdFor = (slot, d) => {
+    if (!slot) return null;
+    if (slot === "CAL_UP") return "A";
+    if (slot === "CAL_LOW") return adaptiveSessionId("B", d, settings.knee || "good", state.fatigue, () => null);
+    if (slot === "CAL_TRACK") return settings.knee === "irritated" ? "XT1" : "QR1";
+    if (slot === "A" || slot === "B" || slot === "C") return adaptiveSessionId(slot, d, settings.knee || "good", state.fatigue, () => null);
+    if (slot === "QR1" || slot === "QR2") return settings.knee === "irritated" ? (slot === "QR1" ? "XT1" : "XT2") : slot;
+    if (slot === "EASY") return settings.knee === "irritated" ? "EASYXT" : "EASY";
+    if (slot === "D") return "D";
+    return SESSIONS[slot] ? slot : null;
+  };
   let prevMeta=null;
   dates.forEach((d)=>{
     const e=byDate[d];
@@ -2120,6 +2290,36 @@ function goalDrivenPlanWeek(ctx) {
       return;
     }
     if (d < today) { days.push({date:d,id:null,status:"past",reasons:[],displayShort:"—"}); prevMeta=null; consecutive=0; return; }
+    const pinnedSlot = ((ctx.pins || {})[d]);
+    const pinnedId = pinnedIdFor(pinnedSlot, d);
+    if (pinnedId && SESSIONS[pinnedId] && avail(d) >= Math.max(15, SESSIONS[pinnedId].minMinutes || 15)) {
+      const pinnedTraining = pr5BuildPinnedTrainingDay(d,pinnedSlot,pinnedId,avail(d),budget,state,prevMeta,log);
+      if (pinnedTraining) {
+        (pinnedTraining.modules||[]).forEach((k)=>{ projected[k]=(projected[k]||0)+pr5ModuleCreditValue(k, avail(d)); });
+        days.push({
+          date:d, id:pinnedTraining.id, status:"planned", pinned:true, availableMinutes:avail(d),
+          displayName:pinnedTraining.displayName, displayShort:pinnedTraining.displayShort,
+          displayDesc:pinnedTraining.displayDesc, reasons:pinnedTraining.reasons||[],
+          autoOverride:pinnedTraining.autoOverride||null, goalKeys:pinnedTraining.goalKeys||[],
+        });
+        prevMeta={family:pinnedTraining.family,areas:pinnedTraining.areas||[],hard:!!pinnedTraining.hard}; consecutive = prevMeta.family && prevMeta.family!=="recovery" ? consecutive+1 : 0; if(prevMeta.family==="recovery") recoveryPlaced=true;
+        return;
+      }
+      const credits = pr5EntryCredits({ sessionId:pinnedId, status:"completed" });
+      const modules = Object.keys(credits).filter((k)=>PR5_STIMULI[k]);
+      Object.entries(credits).forEach(([k,v])=>{ projected[k]=(projected[k]||0)+Number(v||0); });
+      const meta = actualMeta({ sessionId:pinnedId, status:"completed" });
+      days.push({
+        date:d, id:pinnedId, status:"planned", pinned:true, availableMinutes:avail(d),
+        displayName:SESSIONS[pinnedId].name, displayShort:SESSIONS[pinnedId].short,
+        displayDesc:SESSIONS[pinnedId].desc,
+        reasons:["Pinned here by trainer chat.","Still goal-scored by the Dec 31 planner, not treated as a static template."],
+        autoOverride:null,
+        goalKeys:pr5GoalKeysForModules(modules,4,state),
+      });
+      prevMeta=meta; consecutive = meta.family && meta.family!=="recovery" ? consecutive+1 : 0; if(meta.family==="recovery") recoveryPlaced=true;
+      return;
+    }
     if ((ctx.dayFlags||{})[d]==="exhausted" || avail(d)<6 || fatigueLevelAt(state.fatigue,"systemic",d)>=3) {
       days.push({date:d,id:"REC",status:"planned",displayName:"Recovery — Protect the Adaptation",displayShort:"Recovery",displayDesc:"No useful hard work beats recovery today.",reasons:["Recovery constraint wins over the weekly forecast."],autoOverride:null,availableMinutes:avail(d),goalKeys:["recovery"]});
       projected.recovery=(projected.recovery||0)+1; recoveryPlaced=true; prevMeta={family:"recovery",areas:[],hard:false}; consecutive=0; return;
@@ -2147,7 +2347,7 @@ function goalDrivenPlanWeek(ctx) {
     }
     if(gap("qualityRun")>0) { const r=pr5RunDay("qualityRun",d,minutes,budget,projected,state,prevMeta,log); if(r) candidates.push({...r,rank:pr5ModuleRank("qualityRun",budget,projected)+1}); }
     if(gap("easyAerobic")>0) { const r=pr5RunDay("easyAerobic",d,minutes,budget,projected,state,prevMeta,log); if(r) candidates.push({...r,rank:pr5ModuleRank("easyAerobic",budget,projected)}); }
-	    const weekIx=Math.max(0,Math.floor(daysBetween(SEP_START,ws)/7)); const rotation=["upper","runHard","lower","easy"][(weekIx+dowMon0(d))%4];
+	    const weekIx=Math.max(0,Math.floor(daysBetween(SEP_START,ws)/7)); const rotation=["upper","mixed","runHard","lower","easy"][(weekIx+dowMon0(d))%5];
 	    candidates.forEach((c)=>{ if(c.family===rotation)c.rank+=.18; }); candidates.sort((a,b)=>b.rank-a.rank);
 	    let choice=candidates[0]||null;
 	    if(!choice && recoveryPlaced) choice=pr5BuildSupportDay(d,minutes,budget,projected,state,prevMeta,log);
@@ -2173,7 +2373,8 @@ function goalDrivenPlanWeek(ctx) {
 
 function planWeek(ctx) {
   const ph=phaseOf(ctx.today); const eff=phaseOf(addDays(weekStartOf(ctx.today),3));
-  if(ph==="pre"||ph==="cal"||eff==="pre"||eff==="cal") {
+  const combineComplete = !!(((ctx.state || {}).ui || {}).combineComplete) || calibrationRemaining(ctx.log || []).length === 0;
+  if(!combineComplete && (ph==="pre"||ph==="cal"||eff==="pre"||eff==="cal")) {
     const legacy=legacyPlanWeek(ctx); return {...legacy,budgetDef:BUDGET_DEF,strategy:null};
   }
   return goalDrivenPlanWeek(ctx);
@@ -2225,11 +2426,13 @@ function goalSnapshot(state) {
   const bwLog = met.bodyweight || [];
   const lastBw = bwLog.length ? bwLog[bwLog.length - 1].v : Number(cal.bodyweight) || 158;
   const pull = met.pullupBest || [];
-  const lastPull = pull.length ? pull[pull.length - 1].v : Number(cal.pullupMax) || 15;
+  const lastPull = pull.length ? pull[pull.length - 1].v : Number(cal.pullupMax) || 13;
+  const push = met.pushupBest || [];
+  const lastPush = push.length ? push[push.length - 1].v : Number(cal.pushupMax) || 33;
   const bench = (state.exercises && state.exercises.benchA) || { weight: 145, history: [] };
   const bestBench = (bench.history || []).reduce((m, h) => Math.max(m, h.w || 0), bench.weight || 0);
   return {
-    lastBw, lastPull, bestBench,
+    lastBw, lastPull, lastPush, bestBench,
     mile: met.mileBest || cal.mile || "5:57",
     fiveK: met.fiveKBest || cal.fiveK || "21:55",
     mu: !!met.muscleUp,
@@ -2429,7 +2632,7 @@ function pr5LiveExtensionPatch(state, plan, date, rawMinutes) {
   var extra = Number(rawMinutes);
   if (!Number.isFinite(extra) || extra <= 0) extra = 8;
   extra = Math.round(pr5Clamp(extra, 5, 30));
-  var preferred = ["core", "arms", "easyAerobic", "verticalPull", "horizontalPull", "verticalPower", "explosivePull", "pressStrength", "lowerStrength"];
+  var preferred = ["core", "arms", "easyAerobic", "fieldConditioning", "verticalPull", "horizontalPull", "verticalPower", "explosivePull", "pressStrength", "lowerStrength"];
   var ranked = preferred
     .filter(function (key) { return pr5LiveModuleAllowed(key, state, current, extra); })
     .map(function (key) { return { key, score: pr5LiveModuleScore(key, plan, current.modules) }; })
@@ -2517,10 +2720,12 @@ function buildCoachSystem(state, plan, today) {
     "Current fatigue (0-3, decays unless re-reported): " + (fatigueParts.join(", ") || "none") + ".\n" +
     "Recent coaching observations: " + memory + ".\nLong-term trainer facts: " + trainerFacts + ".\nRecent athlete timeline: " + recentEvents + ".\nRecent food/context: " + recentFood + ". Recent water: " + recentWater + ". Last weekly check-in: " + checkText + ". Active workout: " + activeText + ".\n" +
     "SPORT PERFORMANCE RULESET: " + sportRules + ".\n" +
+    "ATHLETE STYLE: The athlete likes real coached gym training that mixes strength, explosive power, trunk stiffness and conditioning. Coach-style tools are first-class options: sled pushes/drags, battle ropes/rope flips, medicine-ball slams, landmine shoulder press, walking lunges with slams, trap-bar jumps, box jumps, carries, rows and push-ups. Use these when time, recovery, knee status and goals fit; do not make every day a quiet static lift.\n" +
     "CORE BEHAVIOR: The static program is the starting hypothesis. A/B/C are anchor templates, NOT a push/pull/legs split and NOT sacred day types. The trainer may intelligently combine compatible stimuli on the same day (for example easy aerobic + pull-up skill + a short arms block, or condensed Upper C + 15–20 min easy aerobic) when that better serves the weekly goals. Actual performance data changes future prescription inside safe program constraints. If the user reports what actually happened, update structured state — do not only give advice. A session can be full, partial, skipped, substituted, or mixed. Credit only exercises/stimuli actually completed. Do not create debt for every missed accessory. Primary stimuli matter more than optional accessories.\n" +
     "If the user says the workout was too hard: identify local vs systemic fatigue, log it, and use adjust_week_from_feedback. Hard Upper A should suppress pressing but can leave legs available; hard Lower or hard run should protect the next 24-48h of lower-body intensity. If very hard/systemically wrecked, protect recovery.\n" +
     "If the user says too easy: do NOT punish with random volume. For an accessory that was clearly too easy, use exercise_feedback too_easy (one normal increment). If they mention a load, include actual_weight so the app can learn the load and set the next one. For bench, prefer log_bench with actual reps/RIR evidence rather than a blind jump. For running, record the observation and progress conservatively rather than making a huge one-session jump.\n" +
     "During a workout you may modify TODAY: if the user has a few more minutes, use extend_today_session to add one compatible goal-positive finisher or support block. If the user needs to leave, use shorten_today_session to keep the highest-value remaining work and reflow the rest. If an exercise hurts, remove it; if equipment is unavailable, remove/replace only what is needed. If they can do the session but need to move one exercise or combine test to tomorrow/later, use defer_exercises. For future one-off time constraints use set_day_time. For travel/no-gym/no-equipment use set_day_constraints. Pain is not a challenge to push through.\n" +
+    "SCHEDULE INTENT: If the athlete changes the next few planned day types without claiming completion, use move_session. During combine/setup use CAL_UP for upper baselines, CAL_LOW for lower calibration, and CAL_TRACK for track/run measuring. During normal training use A for upper press, C for pull/arms, B for lower, QR1/QR2 for quality runs, EASY for easy aerobic, and D for athletic microdose.\n" +
     "Food/lifestyle notes are low-friction context. Log them when the user volunteers them; do not demand calories/macros.\n" +
     "GOAL MANAGEMENT: If the athlete changes what they care about, use set_goal instead of merely encouraging them. Examples: 'I don't care about dunking anymore' -> set_goal {key:'vertical', target:'paused', active:false}. 'Bring back vertical' -> set_goal {key:'vertical', target:'active', active:true}. 'Make the 5K the main goal' -> set_goal {key:'fiveK', target:'main priority', priority:1.35}. If they change a numeric target, set_goal with the new target. Paused goals should no longer drive workout selection, although overlapping active goals may keep safe supporting work.\n" +
     "TIMING: A report can describe now, earlier today, yesterday, after a prior workout, or the future. Preserve that distinction. Historical pain that has resolved is not current pain. Future availability is not a recurring weekday rule unless the athlete says it is.\n" +
@@ -2529,9 +2734,9 @@ function buildCoachSystem(state, plan, today) {
     "Respond with ONLY raw JSON, no markdown/fences, shape {\"reply\":\"...\",\"actions\":[...]}.\n" +
     "Allowed actions:\n" +
     "complete_session {date?, feel?}; log_partial_session {date?, duration?, exercises_completed?, exercises_skipped?, feel?, session_rpe?, completion_fraction?, notes?}; skip_session {date?, reason?}; recalc_week {};\n" +
-    "adjust_week_from_feedback {date?, session_rpe?, fatigue_areas?, systemic_fatigue?, pain_areas?, notes?}; set_fatigue {area,level,note?}; exercise_feedback {name,difficulty,actual_weight?,observed_rir?,note?} difficulty=too_easy|appropriate|too_hard; modify_today_session {remove_exercises?,add_exercises?,reason?}; defer_exercises {from_date?,to_date,exercises,reason?}; extend_today_session {date?,minutes?,reason?}; shorten_today_session {date?,minutes?,reason?}; set_today_time {minutes};\n" +
+    "adjust_week_from_feedback {date?, session_rpe?, fatigue_areas?, systemic_fatigue?, pain_areas?, notes?}; set_fatigue {area,level,note?}; exercise_feedback {name,difficulty,actual_weight?,observed_rir?,note?} difficulty=too_easy|appropriate|too_hard; modify_today_session {remove_exercises?,add_exercises?,reason?}; defer_exercises {from_date?,to_date,exercises,reason?}; extend_today_session {date?,minutes?,reason?}; shorten_today_session {date?,minutes?,reason?}; set_today_time {minutes}; move_session {slot,to_date,reason?};\n" +
     "log_event {event_type,occurred_at?,body_area?,severity?,active?,context?,text?,data?}; remember_fact {key?,text,confidence?}; log_set {name,weight?,reps?,rir?,note?};\n" +
-    "log_bench {weight,reps?}; set_bench_weight {weight}; log_metric {kind,value}; log_food {text}; log_water {ounces}; log_recovery {sleep_hours?,sleep_score?,feel?,note?}; weekly_checkin {bodyweight?,waist?,knee?,feel?,note?}; log_note {text}; set_goal {key,target,active?,priority?,reason?}; set_knee {status}; set_availability {dow,minutes}; set_day_time {date,minutes}; set_day_constraints {date?,travel?,no_gym?,no_equipment?,note?}; flag_exhausted {}; add_exercise {session,name,sets_reps?,weight?}; remove_exercise {name,session?}; set_exercise_weight {name,weight}; set_skill_stage {stage}.\n" +
+    "log_bench {weight,reps?}; set_bench_weight {weight}; log_metric {kind,value} where kind is bodyweight, waist, pullup, pushup, mile, fiveK, or muscleUp; log_food {text}; log_water {ounces}; log_recovery {sleep_hours?,sleep_score?,feel?,note?}; weekly_checkin {bodyweight?,waist?,knee?,feel?,note?}; log_note {text}; set_goal {key,target,active?,priority?,reason?}; set_knee {status}; set_availability {dow,minutes}; set_day_time {date,minutes}; set_day_constraints {date?,travel?,no_gym?,no_equipment?,note?}; flag_exhausted {}; add_exercise {session,name,sets_reps?,weight?}; remove_exercise {name,session?}; set_exercise_weight {name,weight}; set_skill_stage {stage}.\n" +
     "Exercise names can be natural language. Dates YYYY-MM-DD; omit date for today. Multiple actions allowed. Never invent completed training. If the user says 'I only did bench and pullups', use log_partial_session — not complete_session. If they say 'that was brutal, adjust my week', use adjust_week_from_feedback so the calendar actually changes."
   );
 }
@@ -2570,8 +2775,20 @@ function localCoachExerciseNamesFromText(lower) {
   [
     [/\bbench(?:ed|ing)?\b/, "bench"],
     [/\bpull[-\s]?ups?\b|\bpullups?\b/, "pullup"],
+    [/\bpush[-\s]?ups?\b|\bpushups?\b/, "pushup"],
     [/\brdls?\b|\bromanian deadlifts?\b/, "rdl"],
     [/\bhip thrusts?\b/, "hipThrust"],
+    [/\bleg extensions?\b/, "legExt"],
+    [/\bsled(?:s| push| drag| work)?\b/, "sledPush"],
+    [/\bbattle ropes?\b|\brope flips?\b|\brope waves?\b/, "battleRope"],
+    [/\bball slams?\b|\bmedicine ball slams?\b|\bmed ball slams?\b/, "ballSlam"],
+    [/\bmountain climbers?\b|\bball mountain climbers?\b/, "medBallMtClimber"],
+    [/\btrap[-\s]?bar jumps?\b|\btrapbar jumps?\b/, "trapBarJump"],
+    [/\blandmine(?: shoulder)? presses?\b|\bone shoulder quick presses?\b|\bone shoulder presses?\b/, "landminePress"],
+    [/\bwalking lunges?\b|\blunge slams?\b|\blunges while slamming\b/, "walkingLungeSlam"],
+    [/\bbox jumps?\b/, "boxJump"],
+    [/\btrx rows?\b|\btrx low rows?\b/, "trxRow"],
+    [/\bsplit squats?\b/, "splitSquat"],
     [/\bcurls?\b/, "curl"],
     [/\blateral raises?\b|\bshoulder raises?\b/, "lateralraise"],
     [/\brows?\b|\bcable rows?\b|\bdb rows?\b/, "row"],
@@ -2583,7 +2800,7 @@ function localCoachExerciseNamesFromText(lower) {
   return Array.from(new Set(out));
 }
 function localCoachResolvedExerciseId(name) {
-  var aliases = { bench:"benchA", pullup:"pullup", curl:"hammer", row:"csRow", lateralraise:"latRaise", rdl:"rdl", pulldown:"pulldown" };
+  var aliases = { bench:"benchA", pullup:"pullup", pushup:"pushup", curl:"hammer", row:"csRow", lateralraise:"latRaise", rdl:"rdl", pulldown:"pulldown" };
   return EXERCISE_DEFAULTS[name] ? name : (aliases[name] || name);
 }
 function localCoachExerciseLabel(name) {
@@ -2592,6 +2809,39 @@ function localCoachExerciseLabel(name) {
 }
 function localCoachGoalKeyFromText(lower) {
   return normalizeGoalKey(lower);
+}
+
+function localCoachScheduleMovesFromText(lower, plan, today) {
+  const isCal = !!(plan && plan.calMode) || phaseOf(today) === "cal" || phaseOf(today) === "pre";
+  const slots = {
+    upper: isCal ? "CAL_UP" : "A",
+    lower: isCal ? "CAL_LOW" : "B",
+    run: isCal ? "CAL_TRACK" : "QR1",
+  };
+  const markers = ["today", "tomorrow"];
+  const conceptFor = (chunk) => {
+    if (/\b(upper body|upper|push|pull|chest|back|arms?)\b/.test(chunk)) return "upper";
+    if (/\b(lower body|lower|legs?|leg day)\b/.test(chunk)) return "lower";
+    if (/\b(track|run|running|cardio|mile|5k)\b/.test(chunk)) return "run";
+    return null;
+  };
+  const segmentFor = (word) => {
+    const idx = lower.indexOf(word);
+    if (idx < 0) return "";
+    const starts = markers.map((m) => lower.indexOf(m, idx + word.length)).filter((n) => n >= 0);
+    const end = starts.length ? Math.min.apply(null, starts) : lower.length;
+    return lower.slice(idx, end);
+  };
+  return markers.map((word) => {
+    const concept = conceptFor(segmentFor(word));
+    if (!concept) return null;
+    return {
+      type: "move_session",
+      slot: slots[concept],
+      to_date: word === "tomorrow" ? addDays(today, 1) : today,
+      reason: "Athlete requested " + concept + " work " + word + ".",
+    };
+  }).filter(Boolean);
 }
 
 function localCoachTurn(state, plan, today, userText) {
@@ -2655,12 +2905,16 @@ function localCoachTurn(state, plan, today, userText) {
   if (saysTravel) {
     add({ type: "set_day_constraints", date: targetDate, travel: /travel|traveling|travelling|flight|airport|hotel|road trip|on the road/.test(lower), no_gym: /no gym|hotel only|bodyweight only/.test(lower), no_equipment: /no equipment|bodyweight only/.test(lower), note: text });
   }
+  localCoachScheduleMovesFromText(lower, plan, today).forEach(add);
   if (goalKey && saysGoalOff) {
     add({ type: "set_goal", key: goalKey, target: "paused", active: false, reason: text, date: today });
   } else if (goalKey && saysGoalOn) {
     add({ type: "set_goal", key: goalKey, target: "active", active: true, reason: text, date: today });
   } else if (goalKey && saysGoalPriority) {
     add({ type: "set_goal", key: goalKey, target: "main priority", active: true, priority: 1.35, reason: text, date: today });
+  } else if (/\b(?:want|goal|target)\b/.test(lower) && /\bpush[-\s]?ups?\b|\bpushups?\b/.test(lower)) {
+    var pushGoal = lower.match(/\b(\d{2,3})\s*(?:push[-\s]?ups?|pushups?)\b/) || lower.match(/\bpush[-\s]?ups?[^0-9]*(\d{2,3})\b/);
+    if (pushGoal) add({ type: "set_goal", key: "pushup", target: pushGoal[1] + " straight", active: true, reason: text, date: today });
   }
   if (saysExerciseDefer) {
     var deferredExercises = exercises.map(localCoachResolvedExerciseId);
@@ -2719,10 +2973,16 @@ function localCoachTurn(state, plan, today, userText) {
     var pu = lower.match(/(?:pullup|pull-up|pull ups|pull-ups)[^0-9]*(\d{1,2})/);
     if (pu) add({ type: "log_metric", kind: "pullup", value: Number(pu[1]), date: date });
   }
+  if (/(pushup|push-up|push ups|push-ups)/.test(lower)) {
+    var psu = lower.match(/(?:pushup|push-up|push ups|push-ups)[^0-9]*(\d{1,3})/) || lower.match(/\b(\d{1,3})\s*(?:pushup|push-up|push ups|push-ups)/);
+    if (psu) add({ type: "log_metric", kind: "pushup", value: Number(psu[1]), date: date });
+  }
   if (actions.length === 0) add({ type: "log_note", text: text, date: today });
   var reply = "Saved locally. I turned that message into structured trainer data, so the next forecast can use it. The cloud AI endpoint is not connected in this local prototype yet, so I used the built-in extractor for this one.";
   if (actions.some(function (a) { return a.type === "defer_exercises"; })) {
     reply = "Got it. I moved that piece out of today's session and attached it to " + fmtShort(targetDate === today ? tomorrow : targetDate) + ". The local fallback handled this without the cloud AI endpoint.";
+  } else if (actions.some(function (a) { return a.type === "move_session"; })) {
+    reply = "Got it. I pinned those days as requested. That sets the plan; you will still log what actually happened after training.";
   } else if (actions.some(function (a) { return a.type === "set_goal"; })) {
     reply = "Got it. I updated that goal locally so the planner can rebuild the forecast around the goals you still care about.";
   } else if (actions.some(function (a) { return a.type === "modify_today_session" || a.type === "extend_today_session" || a.type === "shorten_today_session" || a.type === "set_day_time" || a.type === "set_day_constraints" || a.type === "skip_session"; })) {
@@ -2840,6 +3100,37 @@ function pr5WeeklyCoverageRows(state, today) {
 
 import { Check, X, ChevronDown, ChevronRight, ChevronLeft, Clock, Moon, Zap, Activity, Calendar, Settings as SettingsIcon, RefreshCw, TrendingUp, Target, ArrowRight, MessageCircle, Send, Bell } from "lucide-react";
 
+const DEFAULT_TRAINER_FACTS = [
+  {
+    key: "prefer_sled_power",
+    text: "Ryan likes sled work for leg power. Prefer sled pushes/drags as a lower-power option when equipment, recovery and knee status allow.",
+    confidence: .95,
+    date: "2026-08-20",
+  },
+  {
+    key: "no_tibialis_machine",
+    text: "Ryan's main gym does not have a tibialis raise setup. Use calf raises, sled work, step-ups, leg extensions, band walks or other ankle/knee-capacity alternatives instead.",
+    confidence: .95,
+    date: "2026-08-20",
+  },
+  {
+    key: "training_style_field_conditioning",
+    text: "Ryan prefers cornerback-style workouts that mix endurance, strength, explosive power and sweat: battle ropes/rope flips, med-ball slams, landmine shoulder press, walking lunges with slams, sleds, trap-bar jumps, carries, rows and push-ups.",
+    confidence: .95,
+    date: "2026-08-20",
+  },
+  {
+    key: "coach_sheet_reference",
+    text: "Old coach sheet included athletic circuits with jumping jacks, walking rotations, ball mountain climbers, trap-bar jumps, bench/incline press, assisted pull-ups, sled pushes, battle ropes, burpees/ball slams, landmine shoulder press, farmer carries, walking lunges, box jumps and push-ups.",
+    confidence: .9,
+    date: "2026-08-20",
+  },
+];
+
+function defaultTrainerFacts() {
+  return DEFAULT_TRAINER_FACTS.map((f) => ({ ...f }));
+}
+
 function freshDefaultState() {
   const exercises = {};
   Object.entries(EXERCISE_DEFAULTS).forEach(([id, def]) => { exercises[id] = { ...def, history: [] }; });
@@ -2865,7 +3156,7 @@ function freshDefaultState() {
     dayWorkoutOverrides: {},
     fatigue: { areas: {}, systemic: null },
     coachMemory: { observations: [] },
-    trainerMemory: { facts: [] },
+    trainerMemory: { facts: defaultTrainerFacts() },
     athleteEvents: [],
     log: [],
     nutrition: [],
@@ -2878,7 +3169,7 @@ function freshDefaultState() {
     chat: [],
     goalOverrides: {},
     health: { connected: false },
-    metrics: { bodyweight: [], waist: [], pullupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
+    metrics: { bodyweight: [], waist: [], pullupBest: [], pushupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
     ui: { onboarded: false, helpDismissed: false, lastReminder: "" },
   };
 }
@@ -2902,7 +3193,14 @@ function mergeState(def, saved) {
   out.dayWorkoutOverrides = { ...(saved.dayWorkoutOverrides || {}) };
   out.fatigue = { areas: { ...(((saved.fatigue || {}).areas) || {}) }, systemic: (saved.fatigue || {}).systemic || null };
   out.coachMemory = { observations: Array.isArray((saved.coachMemory || {}).observations) ? saved.coachMemory.observations : [] };
-  out.trainerMemory = { facts: Array.isArray((saved.trainerMemory || {}).facts) ? saved.trainerMemory.facts : [] };
+  out.trainerMemory = {
+    facts: mergeArrayByKey(
+      Array.isArray((saved.trainerMemory || {}).facts) ? saved.trainerMemory.facts : [],
+      def.trainerMemory && Array.isArray(def.trainerMemory.facts) ? def.trainerMemory.facts : defaultTrainerFacts(),
+      (x) => x.key || (String(x.date || "") + ":" + String(x.text || "").slice(0, 120)),
+      120,
+    ),
+  };
   out.athleteEvents = Array.isArray(saved.athleteEvents) ? saved.athleteEvents : [];
   out.log = Array.isArray(saved.log) ? saved.log : [];
   out.nutrition = Array.isArray(saved.nutrition) ? saved.nutrition : [];
@@ -2957,6 +3255,7 @@ function mergePostgresHydration(state, snapshot) {
     bodyweight: mergeMetricRows((state.metrics || {}).bodyweight, (snapshot.metrics || {}).bodyweight),
     waist: mergeMetricRows((state.metrics || {}).waist, (snapshot.metrics || {}).waist),
     pullupBest: mergeMetricRows((state.metrics || {}).pullupBest, (snapshot.metrics || {}).pullupBest),
+    pushupBest: mergeMetricRows((state.metrics || {}).pushupBest, (snapshot.metrics || {}).pushupBest),
     mileBest: (state.metrics || {}).mileBest || (snapshot.metrics || {}).mileBest || null,
     fiveKBest: (state.metrics || {}).fiveKBest || (snapshot.metrics || {}).fiveKBest || null,
     muscleUp: !!((state.metrics || {}).muscleUp || (snapshot.metrics || {}).muscleUp),
@@ -2971,6 +3270,7 @@ function mergePostgresHydration(state, snapshot) {
     recoveryLog: mergeArrayByKey(state.recoveryLog, snapshot.recoveryLog, (x) => String(x.date || "") + ":" + String(x.sleepHours || "") + ":" + String(x.note || "").slice(0, 120), 120),
     log: mergeArrayByKey(state.log, snapshot.log, (x) => String(x.date || "") + ":" + String(x.sessionId || "") + ":" + String(x.status || "") + ":" + String(x.ts || ""), 240),
     metrics,
+    pins: { ...((snapshot || {}).pins || {}), ...(state.pins || {}) },
     dayWorkoutOverrides: { ...((snapshot || {}).dayWorkoutOverrides || {}), ...(state.dayWorkoutOverrides || {}) },
     dayFlags: { ...((snapshot || {}).dayFlags || {}), ...(state.dayFlags || {}) },
     goalOverrides: { ...((snapshot || {}).goalOverrides || {}), ...(state.goalOverrides || {}) },
@@ -3199,6 +3499,7 @@ function makeActions(setState, notify) {
         if (kind === "bodyweight") m.bodyweight = [...m.bodyweight, { date, v }];
         if (kind === "waist") m.waist = [...m.waist, { date, v }];
         if (kind === "pullup") m.pullupBest = [...m.pullupBest, { date, v }];
+        if (kind === "pushup") m.pushupBest = [...(m.pushupBest || []), { date, v }];
         if (kind === "mile") m.mileBest = v;
         if (kind === "fiveK") m.fiveKBest = v;
         if (kind === "muscleUp") m.muscleUp = !!v;
@@ -3787,7 +4088,7 @@ function CombineCapturePanel({ session, state, actions, today, dayOverride }) {
       if (showCalItem("benchA") && bw != null) { actions.setExerciseWeight("benchA", bw); actions.saveCalValue("benchBaseline", bw + " × " + (br == null ? 5 : br)); }
       if (showCalItem("benchA") && (bw != null || br != null || rir != null)) actions.logExerciseSet("benchA", today, { weight: bw, reps: br, rir, note: "Combine upper baseline" });
       if (showCalItem("pullup") && num("pullupMax") != null) { actions.saveCalValue("pullupMax", f.pullupMax); actions.logMetric("pullup", num("pullupMax"), today); }
-      if (showCalItem("pushup") && num("pushupMax") != null) actions.saveCalValue("pushupMax", f.pushupMax);
+      if (showCalItem("pushup") && num("pushupMax") != null) { actions.saveCalValue("pushupMax", f.pushupMax); actions.logMetric("pushup", num("pushupMax"), today); }
       if (showCalItem("exPull") && String(f.exPullHeight).trim()) actions.saveCalValue("exPullHeight", f.exPullHeight);
     }
     if (session.id === "CAL_LOW") {
@@ -3803,6 +4104,7 @@ function CombineCapturePanel({ session, state, actions, today, dayOverride }) {
     if (session.id === "CAL_ACCC") [["pulldown","pulldown"],["cableRow1","cableRow1"],["ohp","ohp"],["incCurl","incCurl"],["ohTri","ohTri"],["facePull","facePull"]].forEach(([id,prefix]) => saveWeighted(id,prefix));
     if (session.id !== "CAL_UP") {
       if (addedIds.has("pullup") && num("pullupMax") != null) { actions.saveCalValue("pullupMax", f.pullupMax); actions.logMetric("pullup", num("pullupMax"), today); }
+      if (addedIds.has("pushup") && num("pushupMax") != null) { actions.saveCalValue("pushupMax", f.pushupMax); actions.logMetric("pushup", num("pushupMax"), today); }
       if (addedIds.has("exPull") && String(f.exPullHeight).trim()) actions.saveCalValue("exPullHeight", f.exPullHeight);
     }
     const exerciseIds = Array.from(new Set((session.variants && session.variants[60] ? session.variants[60].map((r) => r[0]) : []).concat(Array.from(addedIds)))).filter((id) => !removedIds.has(id));
@@ -3934,6 +4236,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
   const dayPlan = plan.days.find((d) => d.date === today) || { status: "rest", id: null, reasons: [] };
   const session = dayPlan.id ? SESSIONS[dayPlan.id] : null;
   const phase = phaseOf(today);
+  const phaseChip = state.ui.combineComplete && (phase === "pre" || phase === "cal") ? "PRESEASON · TRAINING" : PHASES[phase].chip;
   const availToday = pr5AvailabilityForDate(state.settings, state, today);
   const defaultTier = snapTier(availToday == null ? 60 : availToday);
   const [tier, setTier] = useState(defaultTier);
@@ -3960,7 +4263,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
       <div className="card" style={{ borderColor: "var(--accent2)" }}>
         <div className="scorehead">
           <div>
-            <div className="eyebrow" style={{ color: "var(--accent)" }}>TODAY'S WORKOUT · {fmtLong(today)} · {PHASES[phase].chip}</div>
+            <div className="eyebrow" style={{ color: "var(--accent)" }}>TODAY'S WORKOUT · {fmtLong(today)} · {phaseChip}</div>
             <h1 className="big">
               {completed ? (partial ? "Partially banked: " : "Banked: ") + (dayPlan.displayShort || session.short) + (partial ? "" : " ✓")
                 : dayPlan.displayName || (session ? session.name : "Open day")}
@@ -4525,22 +4828,26 @@ function WeekPlanner({ state, actions, plan, today, setTab }) {
 }
 
 function CalProgressMini({ state }) {
+  const combineDone = !!(state.ui && state.ui.combineComplete);
   const done = state.log.filter((e) => e.status === "completed" && SESSIONS[e.sessionId] && SESSIONS[e.sessionId].kind === "cal").map((e) => SLOT_OF[e.sessionId]);
-  const coreDone = CAL_CORE_IDS.filter((id) => done.includes(id)).length;
-  const optionalDone = CAL_OPTIONAL_IDS.filter((id) => done.includes(id)).length;
+  const coreDone = combineDone ? CAL_CORE_IDS.length : CAL_CORE_IDS.filter((id) => done.includes(id)).length;
+  const optionalDone = combineDone ? CAL_OPTIONAL_IDS.length : CAL_OPTIONAL_IDS.filter((id) => done.includes(id)).length;
   const vals = state.calibration.values;
   const wDone = Object.keys(EXERCISE_DEFAULTS).filter((id) => EXERCISE_DEFAULTS[id].cal && state.exercises[id].weight != null).length;
   const wAll = Object.keys(EXERCISE_DEFAULTS).filter((id) => EXERCISE_DEFAULTS[id].cal).length;
   const baselineKeys = ["bodyweight", "benchBaseline", "pullupMax", "mile", "fiveK"];
-  const baselineDone = baselineKeys.filter((k) => String(vals[k] || "").trim()).length;
+  const baselineDone = combineDone ? baselineKeys.length : baselineKeys.filter((k) => String(vals[k] || "").trim()).length;
+  const trackDone = combineDone || vals.trackLaps;
+  const verticalDone = combineDone || vals.verticalJump;
   return (
     <div>
+      {combineDone && <p className="small" style={{ marginBottom: 8, color: "var(--good)" }}>Combine accepted complete. Missing loads now learn from real workouts and Trainer chat.</p>}
       <div className="budgetrow"><div className="lab">Core baseline sessions</div><Bar val={coreDone} max={CAL_CORE_IDS.length} /><div className="cnt num">{coreDone} / {CAL_CORE_IDS.length}</div></div>
       <div className="budgetrow"><div className="lab">Minimum goal numbers</div><Bar val={baselineDone} max={baselineKeys.length} /><div className="cnt num">{baselineDone} / {baselineKeys.length}</div></div>
       <div className="budgetrow"><div className="lab">Working loads learned</div><Bar val={wDone} max={wAll} /><div className="cnt num">{wDone} / {wAll}</div></div>
       <div className="budgetrow"><div className="lab">Optional load sweeps</div><Bar val={optionalDone} max={CAL_OPTIONAL_IDS.length} /><div className="cnt num">{optionalDone} / {CAL_OPTIONAL_IDS.length}</div></div>
-      <div className="budgetrow"><div className="lab">Track measured</div><Bar val={vals.trackLaps ? 1 : 0} max={1} /><div className="cnt num">{vals.trackLaps ? "1 / 1" : "0 / 1"}</div></div>
-      <div className="budgetrow"><div className="lab">Vertical baseline</div><Bar val={vals.verticalJump ? 1 : 0} max={1} /><div className="cnt num">{vals.verticalJump ? "1 / 1" : "0 / 1"}</div></div>
+      <div className="budgetrow"><div className="lab">Track measured</div><Bar val={trackDone ? 1 : 0} max={1} /><div className="cnt num">{trackDone ? "1 / 1" : "0 / 1"}</div></div>
+      <div className="budgetrow"><div className="lab">Vertical baseline</div><Bar val={verticalDone ? 1 : 0} max={1} /><div className="cnt num">{verticalDone ? "1 / 1" : "0 / 1"}</div></div>
     </div>
   );
 }
@@ -4592,7 +4899,7 @@ function ProgramModuleCard({ moduleKey, stage }) {
   const stim = PR5_STIMULI[moduleKey];
   if (!m || !stim) return null;
   const options = pr5ModuleMenu(moduleKey, stage).slice(0, 4);
-  const familyLabel = m.family === "runHard" ? "quality run" : m.family === "easy" ? "easy cardio" : m.family;
+  const familyLabel = m.family === "runHard" ? "quality run" : m.family === "easy" ? "easy cardio" : m.family === "mixed" ? "coached circuit" : m.family;
   return (
     <div className="kpi" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div className="eyebrow" style={{ color: m.hard ? "var(--warn)" : "var(--accent)" }}>{familyLabel} · {m.range || ("~" + m.minutes)} min</div>
@@ -4627,7 +4934,8 @@ function ProgramView({ state, actions, setTab, plan, today }) {
   const activeBudget = plan && plan.budgetDef ? plan.budgetDef : [];
   const liveRows = activeBudget.filter((b) => !b.optional || Number(b.target || 0) > 0).slice(0, 8);
   const isCombine = plan && plan.calMode;
-  const modules = ["pressStrength", "verticalPull", "horizontalPull", "lowerStrength", "verticalPower", "qualityRun", "easyAerobic", "explosivePull", "core", "arms"];
+  const combineDone = !!(state.ui && state.ui.combineComplete);
+  const modules = ["pressStrength", "verticalPull", "horizontalPull", "lowerStrength", "verticalPower", "fieldConditioning", "qualityRun", "easyAerobic", "explosivePull", "core", "arms"];
   const combinePct = (() => {
     const calibratedWeights = Object.values(state.exercises).filter((ex) => ex.cal && ex.weight != null).length;
     const totalWeights = Object.values(state.exercises).filter((ex) => ex.cal).length;
@@ -4640,7 +4948,7 @@ function ProgramView({ state, actions, setTab, plan, today }) {
         <div className="eyebrow">The adaptive playbook · Cornerback Project</div>
         <h1 className="big">Modules first. Calendar second.</h1>
         <p className="small dim" style={{ marginTop: 8 }}>
-          The old A/B/C/D labels are now exercise libraries. The trainer chooses from modules — press strength, pull-up strength, lower force, jump development, quality running, easy aerobic, core, arms and recovery — then mixes the safest useful set for the day.
+          The old A/B/C/D labels are now exercise libraries. The trainer chooses from modules — press strength, pull-up strength, lower force, jump development, field conditioning, quality running, easy aerobic, core, arms and recovery — then mixes the safest useful set for the day.
         </p>
         <p className="small" style={{ marginTop: 10, color: "var(--ice)" }}>
           The method: derive what adaptations are needed for Dec 31, subtract what you actually banked, gate it through knee/fatigue/time, then prescribe the next useful dose. Stretching, easy cardio and small accessories can ride with lifting when they do not interfere.
@@ -4656,7 +4964,7 @@ function ProgramView({ state, actions, setTab, plan, today }) {
         <p className="small dim" style={{ marginTop: 6 }}>
           {isCombine
             ? "You are still before the main training block. Capture the core baselines now; accessory loads can be learned from normal workouts and chat feedback."
-            : "These are outputs, not rules. The trainer re-derives them from Dec 31 goals, real work banked, fatigue, knee status and time."} Combine is {combinePct}% learned.
+            : "These are outputs, not rules. The trainer re-derives them from Dec 31 goals, real work banked, fatigue, knee status and time."} {combineDone ? "Combine accepted complete; remaining precision learns live." : "Combine is " + combinePct + "% learned."}
         </p>
         <div style={{ marginTop: 8 }}>
           {isCombine ? <CalProgressMini state={state} /> : liveRows.length ? <BudgetLedger done={plan.done} budgetDef={activeBudget} /> : <p className="small faint">Targets appear after the current week is planned.</p>}
@@ -4692,6 +5000,7 @@ function ProgramView({ state, actions, setTab, plan, today }) {
           <MixExample title="Lift + engine" body="Bench or pull-up strength can pair with 15–25 minutes of easy aerobic when it does not create lower-body interference." chips={["press/pull", "easy aerobic", "core optional"]} />
           <MixExample title="Lower + jump foundation" body="Early vertical work is not dunk attempts. It is ankle, calf, hip and landing capacity layered around lower force." chips={["lower force", "jump foundation", "knee gate"]} />
           <MixExample title="Run + trunk" body="Quality running owns the day when it is hard. Low-fatigue core or mobility can attach after, but extra leg work usually waits." chips={["quality run", "core", "mobility"]} />
+          <MixExample title="Coached gym circuit" body="When the goals need athletic sweat instead of another quiet lift, the trainer can use sleds, ropes, ball slams, landmine press, carries, rows and jumps." chips={["sled / ropes", "med ball", "power conditioning"]} />
           <MixExample title="15-minute minimum" body="A short day preserves the highest-value dose: press exposure, pull-ups, arms, core or mobility, depending on what moves the goal forecast most." chips={["MES", "priority only", "no junk"]} />
         </div>
       </div>
@@ -4782,6 +5091,7 @@ function GoalRow({ g, snap, ov, state, today }) {
   else if (g.key === "fiveK") { cur = snap.fiveK; pct = pctTimeToward(snap.fiveK, g.startSec, tSec); }
   else if (g.key === "bench") { cur = snap.bestBench + " lb"; pct = Math.min(100, Math.round((100 * snap.bestBench) / tVal)); }
   else if (g.key === "pullup") { cur = snap.lastPull + " reps"; pct = pctToward(snap.lastPull, g.startVal, tVal); }
+  else if (g.key === "pushup") { cur = snap.lastPush + " reps"; pct = pctToward(snap.lastPush, g.startVal, tVal); }
   else if (g.key === "mu") { cur = snap.mu ? "Done" : "Not yet"; pct = snap.mu ? 100 : 0; }
   else if (g.key === "bw") { cur = snap.lastBw + " lb"; pct = pctToward(snap.lastBw, g.startVal, tBand); }
   else if (g.key === "abs" || g.key === "speed") { cur = "tracked at review"; pct = Math.round(detail.progress * 100); }
@@ -4927,6 +5237,7 @@ function PerformanceView({ state, actions, plan, today }) {
   const bwData = state.metrics.bodyweight.map((x) => ({ d: x.date.slice(5), v: Number(x.v) }));
   const benchData = state.exercises.benchA.history.filter((h) => h.w).map((h) => ({ d: h.date.slice(5), v: h.w }));
   const pullData = state.metrics.pullupBest.map((x) => ({ d: x.date.slice(5), v: Number(x.v) }));
+  const pushData = (state.metrics.pushupBest || []).map((x) => ({ d: x.date.slice(5), v: Number(x.v) }));
   const recent = [...state.log].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
 
   return (
@@ -4936,6 +5247,7 @@ function PerformanceView({ state, actions, plan, today }) {
         <div className="kpis">
           <div className="kpi"><div className="l">Bench working</div><div className="v">{state.exercises.benchA.weight} lb</div></div>
           <div className="kpi"><div className="l">Best pull-ups</div><div className="v">{snap.lastPull}</div></div>
+          <div className="kpi"><div className="l">Best push-ups</div><div className="v">{snap.lastPush}</div></div>
           <div className="kpi"><div className="l">Bodyweight</div><div className="v">{snap.lastBw} lb</div></div>
           <div className="kpi"><div className="l">Week workload</div><div className="v">{plan.pct}%</div></div>
         </div>
@@ -4961,11 +5273,18 @@ function PerformanceView({ state, actions, plan, today }) {
           <MiniChart data={pullData} color="#DFAE4F" unit="reps" />
         </div>
         <div className="card">
+          <div className="eyebrow">Push-up tests</div>
+          <MiniChart data={pushData} color="#9FB6D9" unit="reps" />
+        </div>
+      </div>
+      <div className="grid2">
+        <div className="card">
           <div className="eyebrow">Log a number</div>
           <div style={{ display: "grid", gap: 12, marginTop: 8 }}>
             <QuickLog label="Morning bodyweight" unit="lb" placeholder="158.4" onSave={(v) => actions.logMetric("bodyweight", v, today)} />
             <QuickLog label="Waist at navel" unit="in" placeholder="31.0" onSave={(v) => actions.logMetric("waist", v, today)} />
             <QuickLog label="Strict pull-up test" unit="reps" placeholder="16" onSave={(v) => actions.logMetric("pullup", Number(v), today)} />
+            <QuickLog label="Push-up test" unit="reps" placeholder="40" onSave={(v) => actions.logMetric("pushup", Number(v), today)} />
             <QuickLog label="Mile time trial" unit="mm:ss" placeholder="5:49" onSave={(v) => actions.logMetric("mile", v, today)} />
             <QuickLog label="5K time trial" unit="mm:ss" placeholder="21:10" onSave={(v) => actions.logMetric("fiveK", v, today)} />
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -5045,13 +5364,17 @@ function PerformanceView({ state, actions, plan, today }) {
 function CalibrationView({ state, actions }) {
   const groups = [["A", "Upper A accessories"], ["B", "Lower athletic"], ["C", "Upper B accessories"], ["D", "Full-body optional"]];
   const calDoneSlots = new Set(state.log.filter((e) => e.status === "completed").map((e) => SLOT_OF[e.sessionId]));
+  const combineDone = !!(state.ui && state.ui.combineComplete);
+  const slotDone = (id) => combineDone || calDoneSlots.has(id);
   return (
     <div>
       <div className="card">
         <div className="eyebrow">Aug 19 – 30 · combine + calibration</div>
-        <h1 className="big">Enough baseline. Then train.</h1>
+        <h1 className="big">{combineDone ? "Combine accepted complete." : "Enough baseline. Then train."}</h1>
         <p className="small dim" style={{ marginTop: 8 }}>
-          The trainer needs a few anchor numbers, not a perfect lab day. Core baselines get scheduled now; accessory loads can be learned during normal workouts when you report what felt easy, hard, painful or skipped.
+          {combineDone
+            ? "You gave the trainer enough baseline signal to start the real plan. Retest later if you want cleaner numbers; normal training and chat feedback own the updates now."
+            : "The trainer needs a few anchor numbers, not a perfect lab day. Core baselines get scheduled now; accessory loads can be learned during normal workouts when you report what felt easy, hard, painful or skipped."}
         </p>
         <div className="card tight" style={{ marginTop: 14, borderColor: "var(--accent2)", background: "var(--panel2)" }}>
           <div className="eyebrow" style={{ color: "var(--accent)" }}>Calibration rule</div>
@@ -5061,27 +5384,27 @@ function CalibrationView({ state, actions }) {
           <div className="eyebrow">Core baseline sessions</div>
           {CAL_CORE_IDS.map((id) => (
             <div key={id} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: "1px solid var(--line)", alignItems: "baseline" }}>
-              {calDoneSlots.has(id) ? <Check size={14} color="var(--good)" style={{ flexShrink: 0, position: "relative", top: 2 }} /> : <span className="num faint" style={{ width: 14 }}>·</span>}
+              {slotDone(id) ? <Check size={14} color="var(--good)" style={{ flexShrink: 0, position: "relative", top: 2 }} /> : <span className="num faint" style={{ width: 14 }}>·</span>}
               <div>
                 <b style={{ fontSize: 13.5 }}>{SESSIONS[id].name}</b>
                 <p className="small dim" style={{ marginTop: 2 }}>{SESSIONS[id].desc}</p>
               </div>
             </div>
           ))}
-          <p className="small faint" style={{ marginTop: 8 }}>The Today screen schedules these across the window. Finish these and the September roadmap has enough signal to start.</p>
+          <p className="small faint" style={{ marginTop: 8 }}>{combineDone ? "Complete for planning. These can be repeated later as retests, not blockers." : "The Today screen schedules these across the window. Finish these and the September roadmap has enough signal to start."}</p>
         </div>
         <div style={{ marginTop: 14 }}>
           <div className="eyebrow">Optional load sweeps</div>
           {CAL_OPTIONAL_IDS.map((id) => (
             <div key={id} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: "1px solid var(--line)", alignItems: "baseline" }}>
-              {calDoneSlots.has(id) ? <Check size={14} color="var(--good)" style={{ flexShrink: 0, position: "relative", top: 2 }} /> : <span className="num faint" style={{ width: 14 }}>·</span>}
+              {slotDone(id) ? <Check size={14} color="var(--good)" style={{ flexShrink: 0, position: "relative", top: 2 }} /> : <span className="num faint" style={{ width: 14 }}>·</span>}
               <div>
                 <b style={{ fontSize: 13.5 }}>{SESSIONS[id].name}</b>
                 <p className="small dim" style={{ marginTop: 2 }}>{SESSIONS[id].desc}</p>
               </div>
             </div>
           ))}
-          <p className="small faint" style={{ marginTop: 8 }}>Useful when you have time, not mandatory. The same loads can be learned later from workout logs and Trainer chat.</p>
+          <p className="small faint" style={{ marginTop: 8 }}>{combineDone ? "Accepted complete. Any missing accessory load now gets learned when you actually use it." : "Useful when you have time, not mandatory. The same loads can be learned later from workout logs and Trainer chat."}</p>
         </div>
       </div>
 
@@ -5182,6 +5505,7 @@ function WeeklyCheckinCard({ state, actions, today }) {
 }
 
 function CalibrationSettingsSection({ state, actions }) {
+  const combineDone = !!(state.ui && state.ui.combineComplete);
   const calibratedWeights = Object.values(state.exercises).filter((ex) => ex.cal && ex.weight != null).length;
   const totalWeights = Object.values(state.exercises).filter((ex) => ex.cal).length;
   const baselineDone = CAL_BASELINES.filter((b) => String(state.calibration.values[b.key] || "").trim()).length;
@@ -5189,8 +5513,8 @@ function CalibrationSettingsSection({ state, actions }) {
   const groups = [["A","Upper anchor"],["B","Lower anchor"],["C","Pull / power anchor"],["D","Athletic microdose"]];
   return (
     <div className="card">
-      <div className="eyebrow">Calibration & Baselines · {pct}% learned</div>
-      <p className="small dim" style={{ marginTop: 6 }}>This is not a separate combine you have to finish. Your first real workouts teach the trainer your working loads and tolerances. Use this section only to review or correct what it has learned.</p>
+      <div className="eyebrow">Calibration & Baselines · {combineDone ? "accepted complete" : pct + "% learned"}</div>
+      <p className="small dim" style={{ marginTop: 6 }}>{combineDone ? "Combine is done for planning. Your first real workouts teach the trainer the remaining working loads, preferences and tolerances. Use this section only to review, correct, or retest." : "This is not a separate combine you have to finish. Your first real workouts teach the trainer your working loads and tolerances. Use this section only to review or correct what it has learned."}</p>
       <Collapse title="Baseline measurements">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 10 }}>
           {CAL_BASELINES.map((b) => <div className="field" key={b.key}><label>{b.label}{b.unit ? " · " + b.unit : ""}</label><input className="input" value={state.calibration.values[b.key] || ""} placeholder={b.seed || ""} onChange={(e)=>actions.saveCalValue(b.key,e.target.value)} /></div>)}
@@ -5609,7 +5933,7 @@ function runCoachActions(list, ctx) {
       } else if (a.type === "recalc_week") {
         actions.recalc(); out.push("✓ week recalculated");
       } else if (a.type === "move_session") {
-        if (PRIORITY.indexOf(a.slot) >= 0 && a.to_date && /^\d{4}-\d{2}-\d{2}$/.test(a.to_date)) { actions.pinSession(a.to_date, a.slot); out.push("✓ " + a.slot + " pinned to " + fmtShort(a.to_date)); }
+        if (PINNABLE_SLOTS.indexOf(a.slot) >= 0 && a.to_date && /^\d{4}-\d{2}-\d{2}$/.test(a.to_date)) { actions.pinSession(a.to_date, a.slot); out.push("✓ " + a.slot + " pinned to " + fmtShort(a.to_date)); }
         else out.push("• couldn't parse that move");
       } else if (a.type === "log_event") {
         actions.logAthleteEvent(date, {
@@ -5639,9 +5963,9 @@ function runCoachActions(list, ctx) {
         const w = Number(a.weight);
         if (Number.isFinite(w) && w > 0) { actions.setExerciseWeight("benchA", w); out.push("✓ bench working weight → " + w + " lb"); }
       } else if (a.type === "log_metric") {
-        const kinds = ["bodyweight", "waist", "pullup", "mile", "fiveK", "muscleUp"];
+        const kinds = ["bodyweight", "waist", "pullup", "pushup", "mile", "fiveK", "muscleUp"];
         if (kinds.indexOf(a.kind) >= 0 && a.value != null) {
-          const v = a.kind === "pullup" ? Number(a.value) : a.kind === "muscleUp" ? !!a.value : a.value;
+          const v = (a.kind === "pullup" || a.kind === "pushup") ? Number(a.value) : a.kind === "muscleUp" ? !!a.value : a.value;
           actions.logMetric(a.kind, v, date); out.push("✓ " + a.kind + " → " + String(a.value));
         }
       } else if (a.type === "log_food") {
@@ -5898,6 +6222,7 @@ export default function CornerbackApp() {
   }
 
   const phase = phaseOf(today);
+  const phaseChip = state.ui.combineComplete && (phase === "pre" || phase === "cal") ? "PRESEASON · TRAINING" : PHASES[phase].chip;
   return (
     <div className="cb">
       <style>{CSS}</style>
@@ -5907,7 +6232,7 @@ export default function CornerbackApp() {
             <span className="cbmark">CB</span>
             <span className="cbname">Cornerback Project</span>
           </div>
-          <span className="phasechip">{PHASES[phase].chip}</span>
+          <span className="phasechip">{phaseChip}</span>
           <nav className="tabs">
             {TABS.map((t) => (
               <button key={t} className={"tab" + (tab === t ? " active" : "")} onClick={() => setTab(t)}>{t}</button>
