@@ -3137,7 +3137,7 @@ function freshDefaultState() {
   const calValues = {};
   CAL_BASELINES.forEach((b) => { calValues[b.key] = b.seed || ""; });
   return {
-    version: 4,
+    version: 5,
     settings: {
       weekdayMinutes: { 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 75, 6: 60 },
       knee: "good",
@@ -3170,7 +3170,7 @@ function freshDefaultState() {
     goalOverrides: {},
     health: { connected: false },
     metrics: { bodyweight: [], waist: [], pullupBest: [], pushupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
-    ui: { onboarded: false, helpDismissed: false, lastReminder: "" },
+    ui: { onboarded: false, helpDismissed: false, lastReminder: "", combineComplete: true },
   };
 }
 function mergeState(def, saved) {
@@ -3214,6 +3214,10 @@ function mergeState(def, saved) {
   out.goalOverrides = { ...(saved.goalOverrides || {}) };
   out.health = { ...def.health, ...(saved.health || {}) };
   out.ui = { ...def.ui, ...(saved.ui || {}) };
+  const savedUi = saved.ui || {};
+  if (!Object.prototype.hasOwnProperty.call(savedUi, "combineComplete") && Number(saved.version || 0) < 5) {
+    out.ui.combineComplete = true;
+  }
   return out;
 }
 
