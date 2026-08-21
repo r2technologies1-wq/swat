@@ -1,11 +1,11 @@
 /* ============================================================================
    THE CORNERBACK PROJECT — adaptive personalized trainer + hybrid-athlete dashboard
    ----------------------------------------------------------------------------
-   Local-first. Win the block, not the day.
+   API-backed trainer. Win the block, not the day.
 
    Architecture (single file, but strictly layered):
-     1. Storage adapter          — window.storage (Claude) -> localStorage
-                                   (self-hosted) -> in-memory fallback.
+     1. UI state cache           — browser state keeps the interface usable;
+                                   trainer chat/memory requires API + Postgres.
      2. HealthDataProvider       — abstraction for a future HealthKit bridge.
                                    Mock data today. Do NOT read Apple Health
                                    from browser JS; the future path is
@@ -1411,7 +1411,7 @@ const PR5_STIMULI = {
   horizontalPull:  { label: "Horizontal pull", family: "upper", min: 1, max: 2 },
   lowerStrength:   { label: "Lower force", family: "lower", min: 1, max: 2 },
   qualityRun:      { label: "Quality running", family: "runHard", min: 1, max: 2 },
-  easyAerobic:     { label: "Easy aerobic", family: "easy", min: 1, max: 2 },
+  easyAerobic:     { label: "Easy aerobic", family: "easy", min: 0, max: 1 },
   explosivePull:   { label: "Explosive pull / MU", family: "upper", min: 1, max: 2 },
   verticalPower:   { label: "Jump / vertical development", family: "lower", min: 0, max: 2 },
   fieldConditioning:{ label: "Explosive conditioning", family: "mixed", min: 0, max: 2 },
@@ -1422,13 +1422,13 @@ const PR5_STIMULI = {
 
 const PR5_GOAL_MAP = {
   bench:    { pressStrength: 1.55, horizontalPull: .25, fieldConditioning: .20, core: .15 },
-  mile:     { qualityRun: 1.15, easyAerobic: .55, lowerStrength: .25, verticalPower: .30 },
-  fiveK:    { qualityRun: 1.20, easyAerobic: .85, lowerStrength: .20 },
+  mile:     { qualityRun: 1.15, easyAerobic: .25, lowerStrength: .25, verticalPower: .30, fieldConditioning: .18 },
+  fiveK:    { qualityRun: 1.20, easyAerobic: .35, lowerStrength: .20, fieldConditioning: .18 },
   pullup:   { verticalPull: 1.35, horizontalPull: .25, fieldConditioning: .12, core: .10 },
   pushup:   { pressStrength: 1.15, fieldConditioning: .32, core: .28, arms: .18 },
   mu:       { explosivePull: 1.45, verticalPull: .65, core: .15 },
   bw:       { pressStrength: .20, verticalPull: .20, horizontalPull: .20, lowerStrength: .20, arms: .20 },
-  abs:      { core: .90, fieldConditioning: .24, easyAerobic: .20, pressStrength: .10, verticalPull: .10 },
+  abs:      { core: .90, fieldConditioning: .28, easyAerobic: .05, pressStrength: .10, verticalPull: .10 },
   speed:    { fieldConditioning: 1.10, verticalPower: 1.00, lowerStrength: .50, qualityRun: .45, core: .20 },
   vertical: { verticalPower: 1.55, lowerStrength: .65, fieldConditioning: .45, core: .20 },
 };
@@ -1439,10 +1439,10 @@ const PR5_IMPORTANCE = {
 };
 
 const PR5_PHASE_MULT = {
-  sep: { pressStrength: .95, verticalPull: 1.0, horizontalPull: .90, lowerStrength: .95, qualityRun: 1.0, easyAerobic: 1.08, explosivePull: .92, verticalPower: .86, fieldConditioning: .90, arms: .72, core: .95 },
-  oct: { pressStrength: 1.0, verticalPull: 1.0, horizontalPull: .92, lowerStrength: 1.0, qualityRun: 1.05, easyAerobic: .95, explosivePull: 1.05, verticalPower: 1.0, fieldConditioning: 1.08, arms: .78, core: .92 },
-  nov: { pressStrength: 1.08, verticalPull: 1.02, horizontalPull: .88, lowerStrength: .92, qualityRun: 1.12, easyAerobic: .82, explosivePull: 1.14, verticalPower: 1.08, fieldConditioning: 1.12, arms: .65, core: .85 },
-  dec: { pressStrength: .84, verticalPull: .80, horizontalPull: .62, lowerStrength: .62, qualityRun: .90, easyAerobic: .58, explosivePull: .90, verticalPower: .72, fieldConditioning: .82, arms: .32, core: .55 },
+  sep: { pressStrength: .98, verticalPull: 1.0, horizontalPull: .92, lowerStrength: .98, qualityRun: 1.0, easyAerobic: .55, explosivePull: .94, verticalPower: .90, fieldConditioning: 1.08, arms: .72, core: .95 },
+  oct: { pressStrength: 1.02, verticalPull: 1.0, horizontalPull: .94, lowerStrength: 1.0, qualityRun: 1.05, easyAerobic: .50, explosivePull: 1.05, verticalPower: 1.04, fieldConditioning: 1.18, arms: .78, core: .92 },
+  nov: { pressStrength: 1.08, verticalPull: 1.02, horizontalPull: .90, lowerStrength: .94, qualityRun: 1.12, easyAerobic: .44, explosivePull: 1.14, verticalPower: 1.10, fieldConditioning: 1.20, arms: .65, core: .85 },
+  dec: { pressStrength: .84, verticalPull: .80, horizontalPull: .62, lowerStrength: .62, qualityRun: .90, easyAerobic: .30, explosivePull: .90, verticalPower: .72, fieldConditioning: .88, arms: .32, core: .55 },
   post: {},
 };
 
@@ -1452,7 +1452,7 @@ const PR5_STIMULUS_RULES = {
   horizontalPull: { keep: .34, build: .78, hard: true },
   lowerStrength: { keep: .34, build: .74, hard: true },
   qualityRun: { keep: .34, build: .72, hard: true },
-  easyAerobic: { keep: .32, build: .76 },
+  easyAerobic: { keep: .58, build: .96, optional: true },
   explosivePull: { keep: .31, build: .68, hard: true },
   verticalPower: { keep: .28, build: .62 },
   fieldConditioning: { keep: .30, build: .66, hard: true },
@@ -1626,7 +1626,7 @@ function pr5DerivedBudget(state, today) {
   add("arms", "Optional physique/support work; it rides along only when recovery and time allow.");
   add("core", "Trunk stiffness for sprinting, jumping, running and lifting.");
   const hardTargets = rows.filter((r) => (PR5_STIMULUS_RULES[r.key] || {}).hard).reduce((sum, r) => sum + r.target, 0);
-  const recoveryTarget = systemic >= 1 || hardTargets >= 4 || capacity.roomy ? 1 : 0;
+  const recoveryTarget = systemic >= 1 || hardTargets >= 5 ? 1 : 0;
   rows.push({ key: "recovery", label: PR5_STIMULI.recovery.label, min: recoveryTarget, target: recoveryTarget, optional: recoveryTarget === 0, score: 0, pressure: recoveryTarget, reason: recoveryTarget ? "Recovery is prescribed because the current load needs room to adapt." : "Recovery is added by guardrail only when fatigue or day stacking makes it the best decision." });
   const focus = urgencies.slice(0, 3);
   return { rows, scores, focus, stage, phase, capacity, maxLag, globalPressure };
@@ -1689,7 +1689,7 @@ const PR5_MODULES = {
   explosivePull: { key:"explosivePull", label:"Explosive pull + muscle-up", family:"upper", minutes:9, range:"8–18", hard:true, areas:["back","biceps"] },
   lowerStrength: { key:"lowerStrength", label:"Lower force", family:"lower", minutes:22, range:"12–30", hard:true, areas:["hamstrings","glutes","quads"] },
   verticalPower: { key:"verticalPower", label:"Vertical / jump development", family:"lower", minutes:9, range:"8–18", hard:false, areas:["quads","glutes","calves"] },
-  fieldConditioning: { key:"fieldConditioning", label:"Explosive conditioning", family:"mixed", minutes:12, range:"10–35", hard:true, areas:["quads","glutes","hamstrings","calves","shoulders","core"] },
+  fieldConditioning: { key:"fieldConditioning", label:"Explosive conditioning", family:"mixed", minutes:12, range:"10–35", hard:true, areas:["quads","glutes","hamstrings","calves","shoulders","chest","back","biceps","triceps","core"] },
   arms: { key:"arms", label:"Arms", family:"accessory", minutes:7, range:"6–16", hard:false, areas:["biceps","triceps"] },
   core: { key:"core", label:"Core", family:"accessory", minutes:7, range:"6–14", hard:false, areas:["core"] },
   easyAerobic: { key:"easyAerobic", label:"Easy aerobic", family:"easy", minutes:18, range:"15–35", hard:false, areas:["quads","hamstrings","glutes","calves"] },
@@ -1750,6 +1750,7 @@ const PR5_MODULE_VARIANTS = {
     { id:"lower_power_field", label:"lower power field complex", minMinutes:25, kneeSafe:true, rows:[["sledPush","5 × 10–20 yd","hard drive · full recovery"],["lateralBound","3 × 3/side","stick and own the landing"],["hamCurl","2 × 8–10","hamstring support"],["farmer","3 × 30 yd","brace and finish tall"]] },
   ],
   fieldConditioning: [
+    { id:"sled_bound_carry", label:"sled + lower-power circuit", minMinutes:15, lowerFriendly:true, lowerBias:true, kneeSafe:true, rows:[["sledPush","5 × 10–20 yd","powerful drive · full recovery"],["lateralBound","3 × 3/side","stick and own the landing"],["backwardSled","4 controlled drags","knees warm, quads loaded"],["farmer","3 × 30 yd","brace and finish tall"]] },
     { id:"short_field_sweat", label:"short conditioning primer", maxMinutes:15, upperFriendly:true, lowerFriendly:true, rows:[["battleRope","4 × 30 s","fast hands · 45–60 s rest"],["ballSlam","3 × 10","violent but crisp"],["trxRow","2 × 10–12","upper-back pump"]] },
     { id:"core_explosive_training", label:"core + explosive training", minMinutes:18, upperFriendly:true, lowerFriendly:true, rows:[["medBallMtClimber","3 × 30 s","shoulders and trunk under breath"],["ballSlam","4 × 10","violent trunk extension"],["battleRope","4 × 30 s","fast hands"],["farmer","3 × 30 s","brace and carry"]] },
     { id:"chest_athletic_training", label:"chest power circuit", minMinutes:22, upperFriendly:true, rows:[["mbThrow","4 × 3","explosive chest power"],["pushup","4 × 10–20","clean endurance"],["battleRope","4 × 30 s","upper-body conditioning"],["trxRow","3 × 12","balance the pressing"]] },
@@ -1880,7 +1881,8 @@ function pr5PickModuleVariant(key, minutes, stage, state, dateStr, context) {
     var hasLowerIntent = mods.some(function (k) { return ["lowerStrength"].indexOf(k) >= 0; });
     var contextual = null;
     if (hasUpperIntent && !hasLowerIntent) contextual = candidates.filter(function (v) { return v.upperFriendly; });
-    else if (hasLowerIntent) contextual = candidates.filter(function (v) { return v.lowerFriendly; });
+    else if (hasLowerIntent) contextual = candidates.filter(function (v) { return v.lowerBias; });
+    if ((!contextual || !contextual.length) && hasLowerIntent) contextual = candidates.filter(function (v) { return v.lowerFriendly; });
     if (contextual && contextual.length) candidates = contextual;
   }
   var knee = (state && state.settings && state.settings.knee) || "";
@@ -2166,7 +2168,14 @@ function pr5BuildPinnedTrainingDay(d, pinnedSlot, pinnedId, available, budget, s
     const mod = PR5_MODULES[key];
     if (!mod) return;
     if (key === "verticalPower" && state.settings.knee !== "good") return;
-    if (!pr5ModuleEligible(mod, d, state, prevMeta, log) && !(key === "fieldConditioning" && pr5WantsCoachTraining(state))) return;
+    if (!pr5ModuleEligible(mod, d, state, prevMeta, log)) {
+      const lowerFieldIntent = key === "fieldConditioning" && wanted.includes("lowerStrength");
+      const lowerSafe = lowerFieldIntent &&
+        fatigueLevelAt(state.fatigue, "systemic", d) < 2 &&
+        maxAreaFatigue(state.fatigue, ["quads","glutes","hamstrings","calves"], d) < 2 &&
+        !(prevMeta && prevMeta.family === "runHard");
+      if (!lowerSafe) return;
+    }
     modules.push(key);
   });
   if (!modules.length) return null;
@@ -2291,10 +2300,10 @@ function pr5BuildSupportDay(d, available, budget, projected, state, prevMeta, lo
   if (fatigueLevelAt(state.fatigue,"systemic",d) >= 1) return null;
   const stage = budget.stage;
   const rotation = [
-    ["easyAerobic","core"],
     ["arms","core"],
     ["verticalPower","core"],
     ["fieldConditioning","core"],
+    ["horizontalPull","core"],
   ][pr5Hash(d) % 4];
   const chosen=[]; let used=0;
   rotation.forEach((key) => {
@@ -2925,7 +2934,7 @@ function localCoachScheduleMovesFromText(lower, plan, today) {
   }).filter(Boolean);
 }
 
-function localCoachTurn(state, plan, today, userText) {
+function localCoachTurn(state, plan, today, userText, opts) {
   var text = String(userText || "").trim();
   var lower = text.toLowerCase();
   var actions = [];
@@ -2958,6 +2967,7 @@ function localCoachTurn(state, plan, today, userText) {
   var saysGoalOn = /(bring back|restore|resume|restart|make .*goal again|add .*goal)/.test(lower);
   var saysGoalPriority = /(main goal|primary goal|priority|prioritize|focus on|main focus)/.test(lower);
   var goalKey = (saysGoalOff || saysGoalOn || saysGoalPriority) ? localCoachGoalKeyFromText(lower) : null;
+  var saysSwapTodayTomorrow = /(swap|switch|change).*(today|today's|todays).*(tomorrow|tomorrow's|tomorrows)|((today|today's|todays).*(tomorrow|tomorrow's|tomorrows).*(swap|switch|change))/.test(lower);
   var saysExerciseDefer = exercises.length > 0 &&
     /(can't|cannot|cant|won't|wont|unable|not able|can't do|cannot do|cant do|skip|move|push|defer|make it)/.test(lower) &&
     /(tomorrow|later|next day|today)/.test(lower) &&
@@ -2985,6 +2995,14 @@ function localCoachTurn(state, plan, today, userText) {
   }
   if (saysTravel) {
     add({ type: "set_day_constraints", date: targetDate, travel: /travel|traveling|travelling|flight|airport|hotel|road trip|on the road/.test(lower), no_gym: /no gym|hotel only|bodyweight only/.test(lower), no_equipment: /no equipment|bodyweight only/.test(lower), note: text });
+  }
+  if (saysSwapTodayTomorrow && plan && Array.isArray(plan.days)) {
+    var todayPlan = plan.days.find(function (d) { return d.date === today; });
+    var tomorrowPlan = plan.days.find(function (d) { return d.date === tomorrow; });
+    var todaySlot = todayPlan && todayPlan.id ? SLOT_OF[todayPlan.id] : null;
+    var tomorrowSlot = tomorrowPlan && tomorrowPlan.id ? SLOT_OF[tomorrowPlan.id] : null;
+    if (tomorrowSlot && PINNABLE_SLOTS.indexOf(tomorrowSlot) >= 0) add({ type: "move_session", slot: tomorrowSlot, to_date: today, reason: text });
+    if (todaySlot && PINNABLE_SLOTS.indexOf(todaySlot) >= 0) add({ type: "move_session", slot: todaySlot, to_date: tomorrow, reason: text });
   }
   localCoachScheduleMovesFromText(lower, plan, today).forEach(add);
   if (goalKey && saysGoalOff) {
@@ -3059,9 +3077,12 @@ function localCoachTurn(state, plan, today, userText) {
     if (psu) add({ type: "log_metric", kind: "pushup", value: Number(psu[1]), date: date });
   }
   if (actions.length === 0) add({ type: "log_note", text: text, date: today });
-  var reply = "Saved locally. I turned that message into structured trainer data, so the next forecast can use it. The cloud AI endpoint is not connected in this local prototype yet, so I used the built-in extractor for this one.";
+  var fallbackReason = opts && opts.fallbackReason ? String(opts.fallbackReason) : "";
+  var reply = fallbackReason
+    ? "Trainer backend failed (" + fallbackReason + "). Nothing should be treated as durable trainer memory until the backend succeeds."
+    : "Structured trainer actions extracted.";
   if (actions.some(function (a) { return a.type === "defer_exercises"; })) {
-    reply = "Got it. I moved that piece out of today's session and attached it to " + fmtShort(targetDate === today ? tomorrow : targetDate) + ". The local fallback handled this without the cloud AI endpoint.";
+    reply = "Got it. I moved that piece out of today's session and attached it to " + fmtShort(targetDate === today ? tomorrow : targetDate) + ".";
   } else if (actions.some(function (a) { return a.type === "move_session"; })) {
     reply = "Got it. I pinned those days as requested. That sets the plan; you will still log what actually happened after training.";
   } else if (actions.some(function (a) { return a.type === "set_goal"; })) {
@@ -4341,7 +4362,7 @@ function WorkoutPanel({ session, tier, state, actions, today, onDone, autoOverri
 
 function BudgetLedger({ done, compact, budgetDef }) {
   const source = budgetDef || BUDGET_DEF;
-  const compactKeys = ["pressStrength","verticalPull","qualityRun","lowerStrength","verticalPower","upperStrength","lowerAthletic","coreMobility"];
+  const compactKeys = ["fieldConditioning","pressStrength","verticalPull","horizontalPull","qualityRun","lowerStrength","verticalPower","explosivePull","core"];
   const activeRows = source.filter((b) => Number(b.target || 0) > 0 || Number((done || {})[b.key] || 0) > 0);
   const rows = compact ? activeRows.filter((b) => compactKeys.includes(b.key)) : activeRows;
   return (
@@ -4360,7 +4381,26 @@ function BudgetLedger({ done, compact, budgetDef }) {
   );
 }
 
-function nextMilestone(phase) {
+function TodayWhyCard({ day, state, override }) {
+  const modules = pr5DayModules(day);
+  const goalKeys = pr5DayGoalKeys(day, state);
+  const focus = modules.length ? modules.map(pr5ModuleLabel).slice(0, 4).join(" + ") : (day.displayShort || "Recovery");
+  const reason = day.pinned
+    ? "You asked for this slot, so the trainer rebuilt the safest useful dose."
+    : "Best useful dose for your goals, time window and logged recovery.";
+  const constraints = constraintText(day);
+  return (
+    <div className="impactbox" style={{ marginTop: 12 }}>
+      <div className="eyebrow" style={{ color: "var(--accent)" }}>Why today</div>
+      <p className="small" style={{ marginTop: 6, color: "var(--ice)" }}>{focus}</p>
+      <GoalPills goalKeys={goalKeys} limit={4} />
+      <p className="small dim" style={{ marginTop: 7 }}>{reason}{constraints ? " · " + constraints : ""}</p>
+    </div>
+  );
+}
+
+function nextMilestone(phase, combineDone) {
+  if (combineDone && (phase === "pre" || phase === "cal")) return "Next: train from the accepted baseline. Loads and exercise choices improve as you log easy/hard, pain, sleep, travel and completion.";
   if (phase === "pre") return "Combine opens Wed, Aug 19 — arrive fresh, not pre-fatigued.";
   if (phase === "cal") return "Sep 1 — Foundation begins with your calibrated loads, not guesses.";
   if (phase === "sep") return "Sep 29–30 monthly review: running trend, bench trend, knee tolerance, recovery.";
@@ -4415,20 +4455,9 @@ function TodayView({ state, actions, plan, today, setTab }) {
             Preseason. The combine opens <b style={{ color: "var(--text)" }}>Wednesday, Aug 19</b> — baseline tests and load calibration, spread across ~10 days so nothing is exhausting. Today stays light on purpose.
           </p>
         )}
-        {(phase === "pre" || phase === "cal") && combineDone && (
-          <p className="small dim" style={{ marginTop: 10 }}>
-            Combine accepted complete. The trainer is using your baseline signals now; missing precision gets learned from workout feedback instead of blocking training.
-          </p>
-        )}
-
         {!completed && session && (
           <div style={{ marginTop: 8 }}>
-            <p className="dim" style={{ fontSize: 13.5 }}>{dayPlan.displayDesc || session.desc}</p>
-            <Collapse title="Why the trainer chose this today">
-              {dayPlan.reasons.length ? dayPlan.reasons.map((r, i) => (<p key={i} style={{ marginTop: i ? 5 : 0 }}>{r}</p>)) : <p>This is the highest-priority safe session for the current block.</p>}
-              {dayPlan.pinned && <p style={{ marginTop: 5 }}>Pinned here by you.</p>}
-            </Collapse>
-            <DayImpactBox day={dayPlan} plan={plan} state={state} />
+            <TodayWhyCard day={dayPlan} state={state} override={mergedOverride} />
 
             {!isCal && (session.variants || (mergedOverride.add && mergedOverride.add.length)) && (
               <div style={{ marginTop: 16 }}>
@@ -4441,8 +4470,6 @@ function TodayView({ state, actions, plan, today, setTab }) {
                     <button key={t} className={"chip" + (tier === t ? " active" : "")} onClick={() => setTier(t)}>{tierLabel(t)}</button>
                   ))}
                 </div>
-                {tier === 15 && <p className="small dim" style={{ marginTop: 8 }}>Not a failed version of the long workout — the highest-priority stimulus, preserved on a busy day.</p>}
-                {mergedOverride.reason && <p className="small" style={{ color: "var(--accent)", marginTop: 8 }}>{pr5DisplayOverrideReason(mergedOverride)}</p>}
                 <ExerciseList session={session} tier={tier} state={state} date={today} autoOverride={dayPlan.autoOverride} goCalibrate={() => setTab("CALIBRATION")} />
               </div>
             )}
@@ -4507,26 +4534,13 @@ function TodayView({ state, actions, plan, today, setTab }) {
           <div style={{ marginTop: 8 }}>
             <BudgetLedger done={plan.done} compact budgetDef={plan.budgetDef} />
           </div>
-          <p className="small dim" style={{ marginTop: 10 }}>{plan.message}</p>
           <div className="btnrow">
             <button className="btn subtle sm" onClick={() => setTab("ROADMAP")}>Roadmap →</button>
           </div>
         </div>
         <div className="card">
           <div className="eyebrow">Next checkpoint</div>
-          <p style={{ marginTop: 8, fontSize: 13.5 }}>{nextMilestone(phase)}</p>
-          <hr className="hr" />
-          <div className="eyebrow">Trainer state</div>
-          <p className="small dim" style={{ marginTop: 6 }}>
-            {(() => { const f = FATIGUE_AREAS.concat(["systemic"]).map((a) => [a, fatigueLevelAt(state.fatigue, a, today)]).filter((x) => x[1] > 0); return f.length ? "Live fatigue: " + f.map((x) => x[0] + " " + x[1] + "/3").join(" · ") + ". Tell Coach if this is wrong or has resolved." : "No live fatigue flags. Tell Coach if something is sore, unusually easy/hard, or different from the plan."; })()}
-          </p>
-          <hr className="hr" />
-          <div className="eyebrow">Recovery note</div>
-          <p className="small dim" style={{ marginTop: 6 }}>
-            {state.settings.knee === "irritated"
-              ? "Knee is flagged: impact and provoking lower work are swapped out until you clear it. Pain-free posterior chain and low-impact cardio keep the block moving."
-              : "Accumulate the adaptations. Do not protect the streak. If sleep, soreness, pain, work or travel changes the day, tell Coach and the week will reflow around the real signal."}
-          </p>
+          <p style={{ marginTop: 8, fontSize: 13.5 }}>{nextMilestone(phase, combineDone)}</p>
         </div>
       </div>
     </div>
@@ -5684,6 +5698,8 @@ function TrainerBackendStatus({ compact = false }) {
       try {
         const r = await fetch("/api/health", { cache: "no-store" });
         if (!r.ok) throw new Error("health " + r.status);
+        const contentType = r.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) throw new Error("frontend-only dev server");
         const d = await r.json();
         if (!cancelled) {
           setHealth({
@@ -5696,7 +5712,7 @@ function TrainerBackendStatus({ compact = false }) {
           });
         }
       } catch (e) {
-        if (!cancelled) setHealth({ loading: false, backend: false, openai: false, databaseConfigured: false, databaseReachable: false });
+        if (!cancelled) setHealth({ loading: false, backend: false, openai: false, databaseConfigured: false, databaseReachable: false, databaseError: e instanceof Error ? e.message : "backend unavailable" });
       }
     }
     load();
@@ -5706,7 +5722,7 @@ function TrainerBackendStatus({ compact = false }) {
   const backendClass = health.loading ? "" : health.backend ? " good" : " bad";
   const aiClass = health.openai ? " good" : " warn";
   const dbClass = health.databaseReachable ? " good" : health.databaseConfigured ? " bad" : " warn";
-  const backendText = health.loading ? "checking" : health.backend ? "backend on" : "backend off";
+  const backendText = health.loading ? "checking" : health.backend ? "backend on" : "server off";
   const aiText = health.openai ? "AI on" : "AI key missing";
   const dbText = health.databaseReachable ? "DB on" : health.databaseConfigured ? "DB unreachable" : "DB secret missing";
 
@@ -5830,7 +5846,7 @@ function SettingsView({ state, actions }) {
           <label>Trainer endpoint</label>
           <input className="input" placeholder="/api/trainer" value={state.settings.coachEndpoint || "/api/trainer"} onChange={(e) => actions.setCoachEndpoint(e.target.value)} />
         </div>
-        <p className="small faint" style={{ marginTop: 6 }}>Default: /api/trainer. If the endpoint is unavailable, common messages fall back to local extraction in this browser.</p>
+        <p className="small faint" style={{ marginTop: 6 }}>Default: /api/trainer. Trainer chat requires the backend, OpenAI key, and Postgres memory. If any piece is unavailable, messages are not logged.</p>
         <div className="btnrow">
           <button className="btn subtle sm" onClick={actions.clearChat}>Clear chat history</button>
         </div>
@@ -5876,7 +5892,7 @@ function SettingsView({ state, actions }) {
 
       <div className="card">
         <div className="eyebrow">Data</div>
-        <p className="small dim" style={{ marginTop: 6 }}>Storage backend: <b style={{ color: "var(--ice)" }}>{backend}</b>. Everything lives on your side — export any time.</p>
+        <p className="small dim" style={{ marginTop: 6 }}>Browser cache: <b style={{ color: "var(--ice)" }}>{backend}</b>. Trainer memory lives in Postgres when the backend is connected.</p>
         <div className="btnrow">
           <button className="btn sm" onClick={() => setShowExport(!showExport)}>{showExport ? "Hide export" : "Export JSON"}</button>
           <button className="btn subtle sm" onClick={actions.replayOnboarding}>Replay setup tour</button>
@@ -5924,13 +5940,8 @@ async function claudeCall(sys, msgs) {
   return parseCoachReply(text);
 }
 
-/* Self-hosting: never ship an API key in browser code. Deploy a ~15-line proxy
-   (Vercel function / Replit endpoint) that forwards the request body to
-   https://api.anthropic.com/v1/messages with headers
-   { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
-     "content-type": "application/json" }
-   and returns the JSON unchanged. Paste its URL in Settings → AI Coach.
-   The chain below tries: your proxy → your OpenAI key → built-in Claude. */
+/* Trainer chat is backend-required. Do not ship API keys in browser code, and
+   do not pretend a local parser is durable trainer memory. */
 
 async function coachTurn(state, plan, today, userText) {
   const sys = buildCoachSystem(state, plan, today);
@@ -6171,9 +6182,12 @@ function CoachDrawer({ open, onClose, state, actions, plan, today }) {
       const acts = runCoachActions(res.actions, { state, actions, plan, today });
       actions.pushChat({ role: "assistant", text: res.reply || (acts.length ? "Done." : "Tell me more."), acts });
     } catch (e) {
-      const res = localCoachTurn(state, plan, today, t);
-      const acts = runCoachActions(res.actions, { state, actions, plan, today });
-      actions.pushChat({ role: "assistant", text: res.reply || "Saved locally.", acts });
+      const detail = e instanceof Error ? e.message : "Trainer backend unavailable";
+      actions.pushChat({
+        role: "assistant",
+        text: "Trainer backend is not connected, so I did not log or change anything. Fix the API/DB connection, then send that again. Detail: " + detail,
+        acts: [],
+      });
     }
     setBusy(false);
   };

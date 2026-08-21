@@ -9,7 +9,7 @@ import trainerHandler from "./api/trainer.js";
 
 const app = express();
 const root = path.dirname(fileURLToPath(import.meta.url));
-const port = Number(process.env.PORT || 5000);
+const port = Number(process.env.PORT || 5173);
 const isProd = process.env.NODE_ENV === "production";
 
 app.use(express.json({ limit: "1mb" }));
@@ -69,5 +69,5 @@ if (isProd) {
 }
 
 app.listen(port, "0.0.0.0", () => {
-  console.log(`SWAT trainer running on http://0.0.0.0:${port}`);
+  console.log(`SWAT trainer running on http://localhost:${port}`);
 });

@@ -5,5 +5,8 @@ dist/
 .vercel/
 .env
 .env.local
+.env.development
+.env.production
+.env.replit
 .env.*.local
 .DS_Store

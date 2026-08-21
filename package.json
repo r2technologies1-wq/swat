@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "dev:vite": "vite",
+    "dev:vite": "node server.js",
     "build": "vite build",
     "migrate": "node scripts/migrate.mjs",
     "preview": "vite preview",
