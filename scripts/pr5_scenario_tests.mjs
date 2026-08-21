@@ -63,6 +63,13 @@ function baseState(overrides = {}) {
     },
     metrics: { bodyweight: [], waist: [], pullupBest: [], pushupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
     exercises,
+    trainerMemory: {
+      facts: [
+        { key: "prefer_sled_power", text: "Ryan likes sled work for leg power.", date: "2026-08-20" },
+        { key: "no_tibialis_machine", text: "Ryan's main gym does not have a tibialis raise setup.", date: "2026-08-20" },
+        { key: "training_style_field_conditioning", text: "Ryan wants every normal workout to feel like cornerback field-athlete training with strength, explosive power, trunk stiffness, movement skill and sweat.", date: "2026-08-20" },
+      ],
+    },
     goalOverrides: {},
     log: [],
     pins: {},
@@ -130,7 +137,7 @@ test("missed day reflows without moving a named workout forward", () => {
   const log = [{ date: "2026-09-14", sessionId: "A", status: "skipped", reason: "Work" }];
   const d = todayPlan(plan(today, state, log), today);
   assert.notEqual(d.displayName, E.SESSIONS.A.name);
-  assert.match(d.displayName || "", /Adaptive|Recovery|Quality|Easy|Core/i);
+  assert.match(d.displayName || "", /Adaptive|Field-Athlete|Recovery|Quality|Easy|Core/i);
 });
 
 test("15-minute day creates a short priority session", () => {
@@ -271,13 +278,13 @@ test("pinned upper and lower intents become coached modular training after combi
   const p = plan("2026-08-20", state);
   const upper = todayPlan(p, "2026-08-20");
   const lower = todayPlan(p, "2026-08-21");
-  assert.match(upper.displayName, /Coached Training/);
+  assert.match(upper.displayName, /Field-Athlete Session/);
   assert.ok((upper.autoOverride.modules || []).includes("fieldConditioning"));
   assert.ok((upper.autoOverride.modules || []).includes("pressStrength"));
   assert.ok((upper.autoOverride.modules || []).includes("verticalPower"), "upper coached day should be allowed a tiny lower-power/jump touch when safe");
-  assert.match(lower.displayName, /Coached Training/);
+  assert.match(lower.displayName, /Field-Athlete Session/);
   assert.ok((lower.autoOverride.modules || []).includes("lowerStrength"));
-  assert.ok((lower.autoOverride.add || []).some((x) => ["sledPush", "battleRope", "ballSlam", "medBallMtClimber"].includes(x.id)));
+  assert.ok((lower.autoOverride.add || []).some((x) => ["sledPush", "backwardSled", "battleRope", "ballSlam", "medBallMtClimber", "medBallRotThrow", "medBallScoopToss", "walkingLungeSlam", "trapBarJump", "landminePress", "dbPushPress", "lateralBound", "decelStick", "backpedalBreak", "shuffleSprint", "reactiveGear", "burpeeBroadJump", "boxJump", "trxRow"].includes(x.id)));
 });
 
 test("isolated lower coached day can include a tiny upper-back touch when safe", () => {
@@ -288,7 +295,7 @@ test("isolated lower coached day can include a tiny upper-back touch when safe",
   });
   const p = plan("2026-08-20", state);
   const lower = todayPlan(p, "2026-08-20");
-  assert.match(lower.displayName, /Coached Training/);
+  assert.match(lower.displayName, /Field-Athlete Session/);
   assert.ok((lower.autoOverride.modules || []).includes("lowerStrength"));
   assert.ok((lower.autoOverride.modules || []).includes("horizontalPull"));
 });
@@ -336,12 +343,26 @@ test("adaptive module prescriptions vary and respect exercise avoidance", () => 
   assert.ok(rows.length > 0);
 });
 
-test("field conditioning module uses coach-style athletic circuits", () => {
+test("field conditioning module uses trainer-sheet explosive conditioning", () => {
   const state = baseState({
     trainerMemory: { facts: [{ key: "coach_style", text: "Prefers sleds, battle ropes, med-ball slams and cornerback conditioning circuits", date: "2026-08-20" }] },
   });
   const rows = ids(E.pr5ModuleRows("fieldConditioning", 40, 3, state, "2026-09-16"));
-  assert.ok(rows.some((id) => ["battleRope", "ballSlam", "sledPush", "landminePress", "walkingLungeSlam", "trapBarJump", "boxJump"].includes(id)));
+  assert.ok(rows.some((id) => ["battleRope", "ballSlam", "sledPush", "landminePress", "walkingLungeSlam", "trapBarJump", "boxJump", "lateralBound", "backpedalBreak", "shuffleSprint", "reactiveGear", "medBallRotThrow", "medBallScoopToss", "burpeeBroadJump"].includes(id)));
+});
+
+test("field athlete library surfaces reactive and knee-capacity drills", () => {
+  const state = baseState({
+    trainerMemory: { facts: [{ key: "field_athlete_style", text: "Prefers DB breaks, reactive shuffles, sleds, med-ball throws and KOT knee-capacity work", date: "2026-08-20" }] },
+  });
+  const fieldRows = new Set();
+  const jumpRows = new Set();
+  for (let i = 0; i < 24; i += 1) {
+    ids(E.pr5ModuleRows("fieldConditioning", 45, 4, state, E.addDays("2026-09-01", i))).forEach((id) => fieldRows.add(id));
+    ids(E.pr5ModuleRows("verticalPower", 45, 4, state, E.addDays("2026-09-01", i))).forEach((id) => jumpRows.add(id));
+  }
+  assert.ok(["backpedalBreak", "shuffleSprint", "reactiveGear", "medBallRotThrow", "lateralBound"].some((id) => fieldRows.has(id)), "field conditioning should include DB/reactive/med-ball options");
+  assert.ok(["lateralBound", "reactiveGear", "shuffleSprint"].some((id) => jumpRows.has(id)), "advanced vertical work should include field power and deceleration options");
 });
 
 test("equipment memory removes unavailable tibialis raises", () => {

@@ -159,52 +159,67 @@ function secToMmss(s) {
 }
 
 /* ======================= 3. PROGRAM DATA (editable) ======================= */
-/* Seeded from Cornerback Project V3. Exercise loads stay unknown until
-   observed in training or explicitly entered by the athlete.                */
+/* Seeded from Cornerback Project V3. Known combine results get real loads;
+   unknowns get conservative starters and then learn from chat feedback.      */
 
 const EXERCISE_DEFAULTS = {
-  benchA:    { name: "Barbell bench press",            weight: null, inc: 5,  unit: "lb", cal: true,  group: "A" },
+  benchA:    { name: "Barbell bench press",            weight: null, starter: 165, inc: 5,  unit: "lb", cal: true,  group: "A" },
   pullup:    { name: "Strict / weighted pull-up",      weight: 0,    inc: 5,  unit: "lb added", cal: false, bw: true, group: "A" },
-  csRow:     { name: "Chest-supported DB row",         weight: null, inc: 5,  unit: "lb", cal: true,  group: "A" },
-  inclineDb: { name: "Incline DB press",               weight: null, inc: 5,  unit: "lb", cal: true,  group: "A" },
-  latRaise:  { name: "DB lateral raise",               weight: null, inc: 2.5,unit: "lb", cal: true,  group: "A" },
-  hammer:    { name: "Hammer curl",                    weight: null, inc: 5,  unit: "lb", cal: true,  group: "A" },
-  pressdown: { name: "Cable triceps pressdown",        weight: null, inc: 5,  unit: "lb", cal: true,  group: "A" },
+  csRow:     { name: "Chest-supported DB row",         weight: null, starter: 45, inc: 5,  unit: "lb", cal: true,  group: "A" },
+  inclineDb: { name: "Incline DB press",               weight: null, starter: 45, inc: 5,  unit: "lb", cal: true,  group: "A" },
+  latRaise:  { name: "DB lateral raise",               weight: null, starter: 10, inc: 2.5,unit: "lb", cal: true,  group: "A" },
+  hammer:    { name: "Hammer curl",                    weight: null, starter: 30, inc: 5,  unit: "lb", cal: true,  group: "A" },
+  pressdown: { name: "Cable triceps pressdown",        weight: null, starter: 40, inc: 5,  unit: "lb", cal: true,  group: "A" },
   kneeRaise: { name: "Hanging knee raise",             weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "A" },
 
-  hipThrust: { name: "Hip thrust / glute bridge",      weight: null, inc: 10, unit: "lb", cal: true,  group: "B" },
-  rdl:       { name: "Romanian deadlift",              weight: null, inc: 10, unit: "lb", cal: true,  group: "B" },
-  hamCurl:   { name: "Hamstring curl",                 weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
-  splitSquat:{ name: "Split squat",                     weight: null, inc: 5,  unit: "lb/db", cal: false, group: "B" },
-  stepUp:    { name: "Low step-up / Spanish squat iso",weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
-  calfRaise: { name: "Standing calf raise",            weight: null, inc: 10, unit: "lb", cal: true,  group: "B" },
-  tibRaise:  { name: "Tibialis raise",                 weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
-  legExt:    { name: "Leg extension",                  weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
+  hipThrust: { name: "Hip thrust / glute bridge",      weight: null, starter: 95, inc: 10, unit: "lb", cal: true,  group: "B" },
+  rdl:       { name: "Romanian deadlift",              weight: null, starter: 95, inc: 10, unit: "lb", cal: true,  group: "B" },
+  hamCurl:   { name: "Hamstring curl",                 weight: null, starter: 115, inc: 5,  unit: "lb", cal: true,  group: "B" },
+  splitSquat:{ name: "Split squat",                     weight: null, starter: 20, inc: 5,  unit: "lb/db", cal: false, group: "B" },
+  stepUp:    { name: "Low step-up / Spanish squat iso",weight: null, starter: 0, inc: 5,  unit: "lb", cal: true,  group: "B" },
+  calfRaise: { name: "Standing calf raise",            weight: null, starter: 90, inc: 10, unit: "lb", cal: true,  group: "B" },
+  tibRaise:  { name: "Tibialis raise",                 weight: null, starterLabel: "swap", inc: 5,  unit: "lb", cal: true,  group: "B" },
+  legExt:    { name: "Leg extension",                  weight: null, starter: 115, inc: 5,  unit: "lb", cal: true,  group: "B" },
   bandWalk:  { name: "Lateral band walk",              weight: 0,    inc: 0,  unit: "band", cal: false, bw: true, group: "B" },
-  pallof:    { name: "Pallof press",                   weight: null, inc: 5,  unit: "lb", cal: true,  group: "B" },
+  pallof:    { name: "Pallof press",                   weight: null, starter: 25, inc: 5,  unit: "lb", cal: true,  group: "B" },
 
   exPull:    { name: "Explosive pull-up",              weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "C" },
   muTrans:   { name: "Band-assisted muscle-up / transition", weight: 0, inc: 0, unit: "band", cal: false, bw: true, group: "C" },
-  pulldown:  { name: "Lat pulldown",                   weight: null, inc: 5,  unit: "lb", cal: true,  group: "C" },
-  cableRow1: { name: "1-arm cable row",                weight: null, inc: 5,  unit: "lb", cal: true,  group: "C" },
-  ohp:       { name: "DB overhead press",              weight: null, inc: 5,  unit: "lb", cal: true,  group: "C" },
+  pulldown:  { name: "Lat pulldown",                   weight: null, starter: 90, inc: 5,  unit: "lb", cal: true,  group: "C" },
+  cableRow1: { name: "1-arm cable row",                weight: null, starter: 35, inc: 5,  unit: "lb", cal: true,  group: "C" },
+  ohp:       { name: "DB overhead press",              weight: null, starter: 30, inc: 5,  unit: "lb", cal: true,  group: "C" },
   benchC:    { name: "Bench press — technique",        weight: null, inc: 5,  unit: "lb", cal: false, derived: "≈60–70% of Upper A bench", group: "C" },
-  incCurl:   { name: "Incline DB curl",                weight: null, inc: 5,  unit: "lb", cal: true,  group: "C" },
-  ohTri:     { name: "Rope overhead triceps extension",weight: null, inc: 5,  unit: "lb", cal: true,  group: "C" },
-  facePull:  { name: "Face pull",                      weight: null, inc: 5,  unit: "lb", cal: true,  group: "C" },
+  incCurl:   { name: "Incline DB curl",                weight: null, starter: 20, inc: 5,  unit: "lb", cal: true,  group: "C" },
+  ohTri:     { name: "Rope overhead triceps extension",weight: null, starter: 35, inc: 5,  unit: "lb", cal: true,  group: "C" },
+  facePull:  { name: "Face pull",                      weight: null, starter: 25, inc: 5,  unit: "lb", cal: true,  group: "C" },
 
-  mbThrow:   { name: "Medicine-ball chest throw",      weight: null, inc: 2,  unit: "lb ball", cal: true, group: "D" },
-  sledPush:  { name: "Sled push / drag",               weight: null, inc: 10, unit: "lb", cal: false, group: "D" },
+  mbThrow:   { name: "Medicine-ball chest throw",      weight: null, starter: 10, inc: 2,  unit: "lb ball", cal: true, group: "D" },
+  sledPush:  { name: "Sled push / drag",               weight: null, starterLabel: "easy sled", inc: 10, unit: "lb", cal: false, group: "D" },
   battleRope:{ name: "Battle ropes",                   weight: 0,    inc: 0,  unit: "30-60 s", cal: false, bw: true, group: "D" },
   ballSlam:  { name: "Medicine-ball slam",             weight: 16,   inc: 2,  unit: "lb ball", cal: false, group: "D" },
   medBallMtClimber: { name: "Medicine-ball mountain climber", weight: 0, inc: 0, unit: "30-60 s", cal: false, bw: true, group: "D" },
-  trapBarJump: { name: "Trap-bar jump",                weight: null, inc: 10, unit: "lb", cal: false, group: "D" },
-  landminePress: { name: "Landmine shoulder press",    weight: null, inc: 5,  unit: "lb", cal: false, group: "D" },
-  walkingLungeSlam: { name: "Walking lunge + med-ball slam", weight: null, inc: 2, unit: "lb ball", cal: false, group: "D" },
+  trapBarJump: { name: "Trap-bar jump",                weight: null, starter: 45, inc: 10, unit: "lb", cal: false, group: "D" },
+  landminePress: { name: "Landmine shoulder press",    weight: null, starter: 25, inc: 5,  unit: "lb", cal: false, group: "D" },
+  dbPushPress: { name: "DB push press",                weight: null, starter: 25, inc: 5,  unit: "lb", cal: false, group: "D" },
+  walkingLungeSlam: { name: "Walking lunge + med-ball slam", weight: null, starter: 10, inc: 2, unit: "lb ball", cal: false, group: "D" },
+  medBallRotThrow: { name: "Medicine-ball rotational throw", weight: null, starter: 10, inc: 2, unit: "lb ball", cal: false, group: "D" },
+  medBallScoopToss: { name: "Medicine-ball scoop toss", weight: null, starter: 10, inc: 2, unit: "lb ball", cal: false, group: "D" },
   boxJump:   { name: "Box jump",                       weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
+  lateralBound: { name: "Lateral bound + stick",       weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
+  decelStick: { name: "Deceleration stick drill",      weight: 0,    inc: 0,  unit: "5–10 yd", cal: false, bw: true, group: "D" },
+  backpedalBreak: { name: "Backpedal break drill",     weight: 0,    inc: 0,  unit: "5–10 yd", cal: false, bw: true, group: "D" },
+  shuffleSprint: { name: "Shuffle-to-sprint drill",    weight: 0,    inc: 0,  unit: "5–10 yd", cal: false, bw: true, group: "D" },
+  reactiveGear: { name: "Reactive gear sprint",        weight: 0,    inc: 0,  unit: "10–20 yd", cal: false, bw: true, group: "D" },
+  backwardSled: { name: "Backward sled drag",          weight: null, starterLabel: "easy sled", inc: 10, unit: "lb", cal: false, group: "D" },
+  kotSplitSquat: { name: "ATG split squat",            weight: null, starter: 0, inc: 5, unit: "lb/db", cal: false, group: "D" },
+  reverseStepDown: { name: "Reverse step-down",        weight: 0,    inc: 0, unit: "bw", cal: false, bw: true, group: "D" },
+  couchStretch: { name: "Active couch stretch pulse",  weight: 0,    inc: 0, unit: "mobility", cal: false, bw: true, group: "D" },
+  pigeonPushup: { name: "Pigeon push-up",              weight: 0,    inc: 0, unit: "mobility", cal: false, bw: true, group: "D" },
+  slantToeTouch: { name: "Slant toe touch",            weight: 0,    inc: 0, unit: "mobility", cal: false, bw: true, group: "D" },
+  burpeeBroadJump: { name: "Burpee + broad jump",      weight: 0,    inc: 0, unit: "bw", cal: false, bw: true, group: "D" },
   trxRow:    { name: "TRX low row",                    weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
-  farmer:    { name: "Farmer carry",                   weight: null, inc: 10, unit: "lb/hand", cal: true, group: "D" },
-  ssRdl:     { name: "DB split-stance RDL",            weight: null, inc: 5,  unit: "lb", cal: true,  group: "D" },
+  farmer:    { name: "Farmer carry",                   weight: null, starter: 40, inc: 10, unit: "lb/hand", cal: true, group: "D" },
+  ssRdl:     { name: "DB split-stance RDL",            weight: null, starter: 25, inc: 5,  unit: "lb", cal: true,  group: "D" },
   pushup:    { name: "Push-up",                        weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
   microRun:  { name: "Fast mile / hard run micro-dose", weight: 0,   inc: 0,  unit: "time", cal: false, bw: true, group: "MIX" },
   abWheel:   { name: "Ab wheel / dead bug",            weight: 0,    inc: 0,  unit: "bw", cal: false, bw: true, group: "D" },
@@ -718,9 +733,9 @@ const CAL_BASELINES = [
   { key: "waist",        label: "Waist at navel", unit: "in", seed: "" },
   { key: "mile",         label: "Mile baseline", unit: "mm:ss", seed: "5:57", locked: true },
   { key: "fiveK",        label: "5K baseline", unit: "mm:ss", seed: "21:55", locked: true },
-  { key: "benchBaseline",label: "Controlled bench baseline (weight × reps)", unit: "e.g. 145 × 5", seed: "" },
+  { key: "benchBaseline",label: "Controlled bench baseline (weight × reps)", unit: "e.g. 145 × 5", seed: "165 × 5" },
   { key: "pullupMax",    label: "Strict pull-up max", unit: "reps", seed: "13" },
-  { key: "pushupMax",    label: "Push-up max", unit: "reps", seed: "" },
+  { key: "pushupMax",    label: "Push-up max", unit: "reps", seed: "33" },
   { key: "exPullHeight", label: "Explosive pull height", unit: "e.g. mid-chest to bar", seed: "" },
   { key: "trackLaps",    label: "Track laps per mile", unit: "laps", seed: "" },
   { key: "trackStraight",label: "Usable straight length", unit: "yd", seed: "" },
@@ -738,7 +753,9 @@ const EXERCISE_CREDITS = {
   hammer: ["biceps"], incCurl: ["biceps"], pressdown: ["triceps"], ohTri: ["triceps"],
   kneeRaise: ["coreMobility"], pallof: ["coreMobility"], abWheel: ["coreMobility"],
   rdl: ["lowerAthletic"], hipThrust: ["lowerAthletic"], hamCurl: ["lowerAthletic"], stepUp: ["lowerAthletic"],
-  farmer: ["athleticMicrodose"], sledPush: ["athleticMicrodose"], ssRdl: ["athleticMicrodose"], calfRaise: ["athleticMicrodose"], tibRaise: ["athleticMicrodose"], legExt: ["athleticMicrodose"], bandWalk: ["athleticMicrodose"],
+  farmer: ["athleticMicrodose"], sledPush: ["athleticMicrodose"], backwardSled: ["athleticMicrodose"], ssRdl: ["athleticMicrodose"], calfRaise: ["athleticMicrodose"], tibRaise: ["athleticMicrodose"], legExt: ["athleticMicrodose"], bandWalk: ["athleticMicrodose"],
+  kotSplitSquat: ["lowerAthletic", "athleticMicrodose"], reverseStepDown: ["athleticMicrodose"], lateralBound: ["athleticMicrodose"], decelStick: ["athleticMicrodose"], backpedalBreak: ["athleticMicrodose"], shuffleSprint: ["athleticMicrodose"], reactiveGear: ["athleticMicrodose"],
+  dbPushPress: ["upperStrength", "athleticMicrodose"], medBallRotThrow: ["athleticMicrodose", "coreMobility"], medBallScoopToss: ["athleticMicrodose"], burpeeBroadJump: ["athleticMicrodose"], couchStretch: ["coreMobility"], pigeonPushup: ["coreMobility"], slantToeTouch: ["coreMobility"],
   easyAerobic20: ["easyRun"],
 };
 
@@ -1397,7 +1414,7 @@ const PR5_STIMULI = {
   easyAerobic:     { label: "Easy aerobic", family: "easy", min: 1, max: 2 },
   explosivePull:   { label: "Explosive pull / MU", family: "upper", min: 1, max: 2 },
   verticalPower:   { label: "Jump / vertical development", family: "lower", min: 0, max: 2 },
-  fieldConditioning:{ label: "Coach-style training", family: "mixed", min: 0, max: 2 },
+  fieldConditioning:{ label: "Explosive conditioning", family: "mixed", min: 0, max: 2 },
   arms:            { label: "Direct arms", family: "accessory", min: 0, max: 2, optional: true },
   core:            { label: "Core / trunk", family: "accessory", min: 1, max: 3 },
   recovery:        { label: "Low-stress recovery", family: "recovery", min: 1, max: 1 },
@@ -1449,8 +1466,9 @@ const PR5_EXERCISE_STIMULI = {
   csRow: ["horizontalPull"], cableRow1: ["horizontalPull"], facePull: ["horizontalPull"],
   exPull: ["explosivePull", "verticalPull"], muTrans: ["explosivePull"],
   rdl: ["lowerStrength"], hipThrust: ["lowerStrength"], hamCurl: ["lowerStrength"], stepUp: ["lowerStrength"], legExt: ["lowerStrength"], ssRdl: ["lowerStrength"], splitSquat: ["lowerStrength"],
-  snapDown: ["verticalPower"], lowPogo: ["verticalPower"], broadJumpDrill: ["verticalPower"], jumpReach: ["verticalPower"], sledPush: ["verticalPower", "lowerStrength", "fieldConditioning"],
-  battleRope: ["fieldConditioning"], ballSlam: ["fieldConditioning", "core"], medBallMtClimber: ["fieldConditioning", "core"], trapBarJump: ["fieldConditioning", "verticalPower"], landminePress: ["fieldConditioning", "pressStrength"], walkingLungeSlam: ["fieldConditioning", "lowerStrength"], boxJump: ["fieldConditioning", "verticalPower"], trxRow: ["fieldConditioning", "horizontalPull"],
+  snapDown: ["verticalPower"], lowPogo: ["verticalPower"], broadJumpDrill: ["verticalPower"], jumpReach: ["verticalPower"], lateralBound: ["verticalPower", "fieldConditioning"], decelStick: ["verticalPower", "fieldConditioning"], sledPush: ["verticalPower", "lowerStrength", "fieldConditioning"], backwardSled: ["verticalPower", "lowerStrength", "fieldConditioning"],
+  battleRope: ["fieldConditioning"], ballSlam: ["fieldConditioning", "core"], medBallMtClimber: ["fieldConditioning", "core"], medBallRotThrow: ["fieldConditioning", "core"], medBallScoopToss: ["fieldConditioning", "verticalPower"], trapBarJump: ["fieldConditioning", "verticalPower"], landminePress: ["fieldConditioning", "pressStrength"], dbPushPress: ["fieldConditioning", "pressStrength"], walkingLungeSlam: ["fieldConditioning", "lowerStrength"], burpeeBroadJump: ["fieldConditioning", "verticalPower"], boxJump: ["fieldConditioning", "verticalPower"], trxRow: ["fieldConditioning", "horizontalPull"], backpedalBreak: ["fieldConditioning", "qualityRun"], shuffleSprint: ["fieldConditioning", "qualityRun"], reactiveGear: ["fieldConditioning", "qualityRun"],
+  kotSplitSquat: ["lowerStrength", "verticalPower"], reverseStepDown: ["lowerStrength", "verticalPower"], couchStretch: ["core"], pigeonPushup: ["core"], slantToeTouch: ["core"],
   hammer: ["arms"], incCurl: ["arms"], pressdown: ["arms"], ohTri: ["arms"],
   kneeRaise: ["core"], pallof: ["core"], abWheel: ["core"], farmer: ["core"], microRun: ["qualityRun"], easyAerobic20: ["easyAerobic"],
 };
@@ -1460,7 +1478,7 @@ const PR5_EXERCISE_AREAS = {
   pullup:["back","biceps"], pulldown:["back","biceps"], csRow:["back","biceps"], cableRow1:["back","biceps"], facePull:["back","shoulders"], exPull:["back","biceps"], muTrans:["back","biceps"],
   rdl:["hamstrings","glutes"], hipThrust:["glutes","hamstrings"], hamCurl:["hamstrings"], stepUp:["quads","glutes"], legExt:["quads"], ssRdl:["hamstrings","glutes"], splitSquat:["quads","glutes"],
   snapDown:["quads","glutes","calves"], lowPogo:["calves"], broadJumpDrill:["quads","glutes","hamstrings","calves"], jumpReach:["quads","glutes","calves"], sledPush:["quads","glutes","calves"],
-  battleRope:["shoulders","core"], ballSlam:["shoulders","core","quads","glutes"], medBallMtClimber:["shoulders","core"], trapBarJump:["quads","glutes","hamstrings","calves"], landminePress:["shoulders","triceps","core"], walkingLungeSlam:["quads","glutes","shoulders","core"], boxJump:["quads","glutes","calves"], trxRow:["back","biceps","core"],
+  battleRope:["shoulders","core"], ballSlam:["shoulders","core","quads","glutes"], medBallMtClimber:["shoulders","core"], medBallRotThrow:["core","shoulders","hips"], medBallScoopToss:["quads","glutes","core","shoulders"], trapBarJump:["quads","glutes","hamstrings","calves"], landminePress:["shoulders","triceps","core"], dbPushPress:["shoulders","triceps","quads","core"], walkingLungeSlam:["quads","glutes","shoulders","core"], burpeeBroadJump:["quads","glutes","calves","chest","shoulders","core"], boxJump:["quads","glutes","calves"], lateralBound:["quads","glutes","calves"], decelStick:["quads","glutes","calves"], backpedalBreak:["quads","glutes","calves"], shuffleSprint:["quads","glutes","calves"], reactiveGear:["quads","glutes","calves"], backwardSled:["quads","glutes","calves"], kotSplitSquat:["quads","glutes","hipFlexors"], reverseStepDown:["quads","glutes"], couchStretch:["hipFlexors","quads"], pigeonPushup:["hips","glutes"], slantToeTouch:["hamstrings","calves"], trxRow:["back","biceps","core"],
   hammer:["biceps"], incCurl:["biceps"], pressdown:["triceps"], ohTri:["triceps"], kneeRaise:["core"], pallof:["core"], abWheel:["core"], farmer:["core"], microRun:["quads","hamstrings","glutes","calves"], easyAerobic20:["quads","hamstrings","glutes","calves"],
 };
 
@@ -1604,7 +1622,7 @@ function pr5DerivedBudget(state, today) {
   add("easyAerobic", "Aerobic base, recovery support and body-composition engine.");
   add("explosivePull", "Muscle-up skill and pulling power, managed around local fatigue.");
   add("verticalPower", stage >= 3 ? "Vertical/dunk power dose only after knee stages earn it." : "Vertical/dunk foundation: landing, ankle/calf and hip capacity before aggressive jumping.");
-  add("fieldConditioning", "Cornerback-style mixed power/conditioning: sleds, ropes, ball slams, jumps, carries and trunk under fatigue.");
+  add("fieldConditioning", "Explosive-conditioning dose: sleds, ropes, ball slams, jumps, carries and trunk under fatigue.");
   add("arms", "Optional physique/support work; it rides along only when recovery and time allow.");
   add("core", "Trunk stiffness for sprinting, jumping, running and lifting.");
   const hardTargets = rows.filter((r) => (PR5_STIMULUS_RULES[r.key] || {}).hard).reduce((sum, r) => sum + r.target, 0);
@@ -1671,7 +1689,7 @@ const PR5_MODULES = {
   explosivePull: { key:"explosivePull", label:"Explosive pull + muscle-up", family:"upper", minutes:9, range:"8–18", hard:true, areas:["back","biceps"] },
   lowerStrength: { key:"lowerStrength", label:"Lower force", family:"lower", minutes:22, range:"12–30", hard:true, areas:["hamstrings","glutes","quads"] },
   verticalPower: { key:"verticalPower", label:"Vertical / jump development", family:"lower", minutes:9, range:"8–18", hard:false, areas:["quads","glutes","calves"] },
-  fieldConditioning: { key:"fieldConditioning", label:"Coach-style training circuit", family:"mixed", minutes:12, range:"10–35", hard:true, areas:["quads","glutes","hamstrings","calves","shoulders","core"] },
+  fieldConditioning: { key:"fieldConditioning", label:"Explosive conditioning", family:"mixed", minutes:12, range:"10–35", hard:true, areas:["quads","glutes","hamstrings","calves","shoulders","core"] },
   arms: { key:"arms", label:"Arms", family:"accessory", minutes:7, range:"6–16", hard:false, areas:["biceps","triceps"] },
   core: { key:"core", label:"Core", family:"accessory", minutes:7, range:"6–14", hard:false, areas:["core"] },
   easyAerobic: { key:"easyAerobic", label:"Easy aerobic", family:"easy", minutes:18, range:"15–35", hard:false, areas:["quads","hamstrings","glutes","calves"] },
@@ -1685,12 +1703,12 @@ const PR5_EXERCISE_ALIASES = {
   rdl:["romanian deadlift","hinge"], hipThrust:["hip thrust","glute bridge"], hamCurl:["hamstring curl"], stepUp:["step-up","spanish squat"], legExt:["leg extension"], ssRdl:["split stance rdl"],
   splitSquat:["split squat","split squats"],
   calfRaise:["calf raise"], tibRaise:["tibialis raise","tib raise"], bandWalk:["band walk","lateral band walk"],
-  sledPush:["sled","sled push","sled drag"],
+  sledPush:["sled","sled push","sled drag"], backwardSled:["backward sled","reverse sled","sled backward","backward drag"], kotSplitSquat:["atg split squat","kot split squat","knees over toes split squat"], reverseStepDown:["reverse step down","reverse step-up","patrick step"],
   battleRope:["battle ropes","rope flips","rope waves"], ballSlam:["ball slam","medicine ball slam","med ball slam"], medBallMtClimber:["mountain climber","medicine ball mountain climber","ball mountain climber"],
-  trapBarJump:["trap bar jump","trapbar jump"], landminePress:["landmine press","landmine shoulder press","one shoulder quick press","one shoulder press"], walkingLungeSlam:["walking lunge slam","lunges while slamming","lunge med ball slam"],
-  boxJump:["box jump","box jumps"], trxRow:["trx row","trx low row"],
+  medBallRotThrow:["rotational throw","medicine ball rotational throw","med ball side throw","side toss"], medBallScoopToss:["scoop toss","med ball scoop toss"], trapBarJump:["trap bar jump","trapbar jump"], landminePress:["landmine press","landmine shoulder press","one shoulder quick press","one shoulder press"], dbPushPress:["db push press","dumbbell push press","quick press"], walkingLungeSlam:["walking lunge slam","lunges while slamming","lunge med ball slam"],
+  boxJump:["box jump","box jumps"], lateralBound:["lateral bound","skater hop","side bound"], decelStick:["deceleration","decel drill","stick drill"], backpedalBreak:["backpedal","back pedal","break drill"], shuffleSprint:["shuffle sprint","shuffle to sprint"], reactiveGear:["reactive sprint","gear sprint","reaction sprint"], burpeeBroadJump:["burpee broad jump","burpee jump"], trxRow:["trx row","trx low row"],
   latRaise:["lateral raise","lateral raises","side raise"], hammer:["hammer curl"], incCurl:["incline curl"], pressdown:["pressdown","triceps pressdown"], ohTri:["overhead triceps"],
-  kneeRaise:["knee raise"], pallof:["pallof"], abWheel:["ab wheel","dead bug"], farmer:["farmer carry"], easyAerobic20:["easy aerobic","cardio","zone 2"],
+  kneeRaise:["knee raise"], pallof:["pallof"], abWheel:["ab wheel","dead bug"], farmer:["farmer carry"], couchStretch:["couch stretch"], pigeonPushup:["pigeon pushup","pigeon push-up"], slantToeTouch:["slant toe touch","toe touch"], easyAerobic20:["easy aerobic","cardio","zone 2"],
 };
 
 const PR5_MODULE_VARIANTS = {
@@ -1699,8 +1717,9 @@ const PR5_MODULE_VARIANTS = {
     { id:"bench_strength", label:"heavy bench anchor", minMinutes:20, rows:[["benchA","4 × 5–6","primary strength work · RPE 7–8"],["inclineDb","2 × 8–10","secondary chest only if recovered"]] },
     { id:"chest_volume", label:"chest volume", minMinutes:25, rows:[["benchC","3 × 6–8","smooth volume · never grind"],["inclineDb","3 × 8–10","controlled chest work"],["pushup","2 × near-clean-stop","stop 2 reps before form fades"]] },
     { id:"press_power", label:"speed / power press", minMinutes:20, rows:[["mbThrow","4 × 3","violent chest pass · full reset"],["benchC","4 × 3","fast bar speed · 60–70%"],["pushup","2 × 8–12","explosive but clean"]] },
-    { id:"coach_chest_training", label:"coach-style chest training", minMinutes:30, rows:[["mbThrow","4 × 3","explosive chest pass · full reset"],["benchA","3 × 5","strong but clean"],["inclineDb","3 × 8–10","chest specialization"],["pushup","3 × 10–20","finish crisp under fatigue"]] },
+    { id:"coach_chest_training", label:"chest-focused training", minMinutes:30, rows:[["mbThrow","4 × 3","explosive chest pass · full reset"],["benchA","3 × 5","strong but clean"],["inclineDb","3 × 8–10","chest specialization"],["pushup","3 × 10–20","finish crisp under fatigue"]] },
     { id:"chest_sweat_circuit", label:"chest + sweat circuit", minMinutes:35, rows:[["benchC","4 × 4","fast press"],["inclineDb","3 × 8","chest volume"],["battleRope","4 × 30 s","conditioning between press blocks"],["pushup","2 × clean stop","upper endurance"]] },
+    { id:"field_press_complex", label:"field press complex", minMinutes:28, rows:[["medBallRotThrow","3 × 4/side","hips-to-hands power"],["dbPushPress","3 × 6/side","quick shoulder drive"],["inclineDb","3 × 8–10","chest focus"],["battleRope","3 × 30 s","finish with fast hands"]] },
     { id:"triceps_supported_press", label:"press + triceps", minMinutes:20, rows:[["benchA","3 × 5","strength touch"],["pressdown","3 × 10–12","triceps support for lockout"]] },
     { id:"shoulder_supported_press", label:"shoulder-supported press", minMinutes:25, rows:[["ohp","3 × 8–10","shoulder strength without chasing max load"],["pushup","3 × 8–15","chest/triceps volume"]] },
   ],
@@ -1727,14 +1746,19 @@ const PR5_MODULE_VARIANTS = {
     { id:"glute_ham", label:"glute / hamstring strength", minMinutes:20, rows:[["hipThrust","4 × 6–8","hard hip extension"],["hamCurl","3 × 10–12","hamstrings"],["ssRdl","2 × 8/side","unilateral hinge"]] },
     { id:"knee_safe_lower", label:"knee-aware lower", minMinutes:15, kneeSafe:true, rows:[["hipThrust","3 × 8–10","low-knee-stress force"],["ssRdl","2 × 8/side","controlled unilateral hinge"],["stepUp","2 × 8/side","pain-free range only"]] },
     { id:"sled_power", label:"sled leg power", minMinutes:16, kneeSafe:true, rows:[["sledPush","6–8 hard pushes","powerful drive · full recovery"],["hamCurl","2 × 8–10","hamstring support"],["legExt","2 × 8–10","quad support · stop before grind"]] },
+    { id:"kot_sled_capacity", label:"sled + knee capacity", minMinutes:20, kneeSafe:true, rows:[["backwardSled","5–6 controlled drags","knees warm, quads loaded, no pounding"],["reverseStepDown","2 × 8/side","own the knee track"],["kotSplitSquat","2 × 6–8/side","pain-free depth only"],["couchStretch","1–2 × 30 s/side","open the hip flexors after"]] },
+    { id:"lower_power_field", label:"lower power field complex", minMinutes:25, kneeSafe:true, rows:[["sledPush","5 × 10–20 yd","hard drive · full recovery"],["lateralBound","3 × 3/side","stick and own the landing"],["hamCurl","2 × 8–10","hamstring support"],["farmer","3 × 30 yd","brace and finish tall"]] },
   ],
   fieldConditioning: [
-    { id:"short_field_sweat", label:"short coached sweat", maxMinutes:15, upperFriendly:true, lowerFriendly:true, rows:[["battleRope","4 × 30 s","fast hands · 45–60 s rest"],["ballSlam","3 × 10","violent but crisp"],["trxRow","2 × 10–12","upper-back pump"]] },
+    { id:"short_field_sweat", label:"short conditioning primer", maxMinutes:15, upperFriendly:true, lowerFriendly:true, rows:[["battleRope","4 × 30 s","fast hands · 45–60 s rest"],["ballSlam","3 × 10","violent but crisp"],["trxRow","2 × 10–12","upper-back pump"]] },
     { id:"core_explosive_training", label:"core + explosive training", minMinutes:18, upperFriendly:true, lowerFriendly:true, rows:[["medBallMtClimber","3 × 30 s","shoulders and trunk under breath"],["ballSlam","4 × 10","violent trunk extension"],["battleRope","4 × 30 s","fast hands"],["farmer","3 × 30 s","brace and carry"]] },
-    { id:"chest_athletic_training", label:"chest athletic circuit", minMinutes:22, upperFriendly:true, rows:[["mbThrow","4 × 3","explosive chest power"],["pushup","4 × 10–20","clean endurance"],["battleRope","4 × 30 s","upper-body conditioning"],["trxRow","3 × 12","balance the pressing"]] },
-    { id:"coach_sheet_power_circuit", label:"coach-sheet power circuit", minMinutes:20, lowerFriendly:true, kneeSafe:true, rows:[["sledPush","5–6 hard turf pushes","powerful drive · full recovery"],["battleRope","4 × 45–60 s","conditioning without jogging"],["landminePress","3 × 8/side","one-shoulder upward drive"],["ballSlam","3 × 12–15","explosive finish"]] },
+    { id:"chest_athletic_training", label:"chest power circuit", minMinutes:22, upperFriendly:true, rows:[["mbThrow","4 × 3","explosive chest power"],["pushup","4 × 10–20","clean endurance"],["battleRope","4 × 30 s","upper-body conditioning"],["trxRow","3 × 12","balance the pressing"]] },
+    { id:"coach_sheet_power_circuit", label:"trainer-sheet power circuit", minMinutes:20, lowerFriendly:true, kneeSafe:true, rows:[["sledPush","5–6 hard turf pushes","powerful drive · full recovery"],["battleRope","4 × 45–60 s","conditioning without jogging"],["landminePress","3 × 8/side","one-shoulder upward drive"],["ballSlam","3 × 12–15","explosive finish"]] },
     { id:"lunge_slam_engine", label:"lunge + slam engine", minMinutes:20, lowerFriendly:true, rows:[["walkingLungeSlam","3 turf lengths","athletic posture · controlled knee"],["medBallMtClimber","3 × 30 s","shoulders + trunk under breath"],["pushup","3 × 10–15","quality reps under fatigue"],["farmer","3 × 30 s","brace and carry"]] },
     { id:"jump_row_circuit", label:"jump + row circuit", minMinutes:25, lowerFriendly:true, rows:[["trapBarJump","3 × 8–10","light and fast"],["boxJump","4 × 5","stick landings"],["trxRow","3 × 12","bodyweight row"],["ballSlam","3 × 10","reset between reps"]] },
+    { id:"db_breaks_and_ropes", label:"DB breaks + ropes", minMinutes:18, lowerFriendly:true, rows:[["backpedalBreak","4 × 2 breaks/side","low hips · snap the plant"],["shuffleSprint","4 × 5–10 yd/side","shuffle, plant, accelerate"],["battleRope","4 × 30 s","fast hands under breath"],["pallof","2 × 10/side","anti-rotation finish"]] },
+    { id:"reactive_field_engine", label:"reactive field engine", minMinutes:20, lowerFriendly:true, rows:[["reactiveGear","5 × 20–30 s","change gears on cue"],["decelStick","4 × 2/side","stop fast without leaking"],["medBallRotThrow","3 × 4/side","violent hip turn"],["ballSlam","3 × 10","finish crisp"]] },
+    { id:"route_power_circuit", label:"route power circuit", minMinutes:24, lowerFriendly:true, rows:[["lateralBound","3 × 3/side","separate and stick"],["backpedalBreak","4 × 2/side","break downhill"],["burpeeBroadJump","3 × 4","low volume · high intent"],["trxRow","3 × 10–12","upper-back balance"]] },
   ],
   arms: [
     { id:"short_arms", label:"short arms microdose", maxMinutes:15, rows:[["hammer","2 × 10–12","clean reps"],["pressdown","2 × 10–12","clean reps"]] },
@@ -1746,6 +1770,7 @@ const PR5_MODULE_VARIANTS = {
     { id:"short_core", label:"short trunk dose", maxMinutes:15, rows:[["kneeRaise","2 × 10–12","controlled"],["pallof","2 × 10/side","anti-rotation"]] },
     { id:"anti_rotation", label:"anti-rotation trunk", minMinutes:12, rows:[["pallof","3 × 10/side","anti-rotation"],["farmer","3 × 30–40 yd","brace while moving"]] },
     { id:"anterior_core", label:"abs / trunk", minMinutes:12, rows:[["abWheel","2–3 × 6–10","clean range"],["kneeRaise","2 × 10–12","no swing"]] },
+    { id:"kot_mobility_trunk", label:"hips + trunk mobility", minMinutes:12, rows:[["couchStretch","2 × 30 s/side","active pulses, not a nap"],["pigeonPushup","2 × 8–10/side","open hips"],["slantToeTouch","2 × 10","hamstrings + calves"],["pallof","2 × 10/side","brace after mobility"]] },
   ],
   easyAerobic: [
     { id:"short_engine", label:"short easy engine", rows:[["easyAerobic20","15–20 min","full-conversation pace"]] },
@@ -1777,19 +1802,23 @@ function pr5VerticalPowerVariants(stage) {
     { id:"jump_foundation", label:"ankle / hip foundation", rows:[["calfRaise","2 × 12–15","jump foundation"],["tibRaise","2 × 15–20","ankle capacity"],["bandWalk","2 × 10/side","hip stability"]] },
     { id:"quiet_knee_foundation", label:"knee-quiet foundation", kneeSafe:true, rows:[["hipThrust","2 × 8–10","hip power base"],["calfRaise","2 × 12–15","calf capacity"],["legExt","2 × 8–10","quad support if tibialis setup is unavailable"]] },
     { id:"sled_foundation", label:"sled power foundation", kneeSafe:true, rows:[["sledPush","6 × 10–20 yd","powerful drive · stop before form slows"],["calfRaise","2 × 12–15","calf capacity"]] },
+    { id:"kot_knee_foundation", label:"KOT knee foundation", kneeSafe:true, rows:[["backwardSled","5 × 20 yd","blood-flow quad work · no pounding"],["reverseStepDown","2 × 8/side","control knee over toes"],["kotSplitSquat","2 × 6/side","pain-free range only"]] },
   ];
   if (stage === 2) return [
     { id:"landing_skill", label:"landing skill", rows:[["snapDown","3 × 3","stick every landing"],["lowPogo","3 × 10","low contacts · skill, not conditioning"]] },
     { id:"sled_accel_power", label:"sled acceleration power", kneeSafe:true, rows:[["sledPush","6–8 × 10–20 yd","hard drive · full recovery"],["snapDown","2 × 3","own the landing"]] },
+    { id:"decel_intro", label:"deceleration intro", rows:[["decelStick","4 × 2/side","stop clean before faster cuts"],["lateralBound","3 × 2/side","small bound · stick quietly"]] },
     { id:"ankle_elastic", label:"ankle elasticity", rows:[["lowPogo","4 × 8","quiet contacts"],["calfRaise","2 × 12–15","capacity back-off"]] },
   ];
   if (stage === 3) return [
     { id:"broad_power", label:"horizontal power", rows:[["broadJumpDrill","3 × 2","full rest · stick landing"],["lowPogo","3 × 10","elastic ankle contacts"]] },
     { id:"reach_intro", label:"reach intro", rows:[["jumpReach","3 × 2","submax rhythm"],["snapDown","3 × 3","own the landing"]] },
+    { id:"field_power_cuts", label:"field power cuts", rows:[["lateralBound","3 × 3/side","separate, stick, reset"],["backpedalBreak","4 × 2/side","low hips · break downhill"]] },
   ];
   return [
     { id:"max_reach", label:"max-reach practice", rows:[["jumpReach","4 × 2","high quality · full rest · stop before fatigue"],["broadJumpDrill","3 × 2","power with clean landing"]] },
     { id:"elastic_power", label:"elastic power", rows:[["lowPogo","4 × 8","springy contacts"],["jumpReach","3 × 2","fresh max intent"]] },
+    { id:"db_power_reactive", label:"DB reactive power", rows:[["reactiveGear","5 × 20 s","react to cue, own the stop"],["shuffleSprint","4 × 5–10 yd/side","shuffle, plant, accelerate"],["lateralBound","3 × 3/side","stick every landing"]] },
   ];
 }
 
@@ -1882,6 +1911,27 @@ function pr5ModuleRows(key, minutes, stage, state, dateStr, context) {
 function pr5ModuleLabel(key) {
   return (PR5_STIMULI[key] && PR5_STIMULI[key].label) || (PR5_MODULES[key] && PR5_MODULES[key].label) || key;
 }
+function pr5ModulePhrase(modules) {
+  return Array.from(new Set(modules || [])).map(pr5ModuleLabel).filter(Boolean).join(" + ");
+}
+function pr5DisplayOverrideReason(override) {
+  if (!override) return "";
+  const raw = String(override.reason || "");
+  const phrase = pr5ModulePhrase(override.modules || []);
+  if (phrase) {
+    if (/Pinned/i.test(raw)) return "Pinned training intent: " + phrase;
+    if (/Support mix/i.test(raw)) return "Support mix: " + phrase;
+    if (/Constraint micro-dose/i.test(raw)) return "Priority micro-dose: " + phrase;
+    if (/Goal-derived/i.test(raw) || /Coach-style|coach-style|coached-training|Athletic circuit|athletic circuit/i.test(raw)) return "Goal-built field-athlete session: " + phrase;
+  }
+  return raw
+    .replace(/Coach-style training circuit/g, "Explosive conditioning")
+    .replace(/Coach-style training/g, "Explosive conditioning")
+    .replace(/coach-style training circuit/g, "explosive conditioning")
+    .replace(/coach-style training/g, "explosive conditioning")
+    .replace(/Athletic circuit/g, "Explosive conditioning")
+    .replace(/athletic circuit/g, "explosive conditioning");
+}
 function pr5WantsCoachTraining(state) {
   const facts = (((state && state.trainerMemory) || {}).facts) || [];
   return facts.some(function (f) {
@@ -1949,8 +1999,8 @@ function pr5EntryFamily(entry) {
   const ids = new Set(entry.exercisesCompleted || []);
   if (ids.has("microRun")) return "runHard";
   if (ids.has("easyAerobic20")) return "easy";
-  if (["battleRope","ballSlam","medBallMtClimber","walkingLungeSlam","trapBarJump","boxJump","sledPush"].some((x) => ids.has(x))) return "mixed";
-  if (["rdl","hipThrust","hamCurl","stepUp","ssRdl","splitSquat","snapDown","lowPogo","broadJumpDrill","jumpReach","calfRaise","tibRaise","legExt","bandWalk"].some((x) => ids.has(x))) return "lower";
+  if (["battleRope","ballSlam","medBallMtClimber","medBallRotThrow","medBallScoopToss","walkingLungeSlam","trapBarJump","boxJump","lateralBound","decelStick","backpedalBreak","shuffleSprint","reactiveGear","burpeeBroadJump","sledPush","backwardSled","dbPushPress","landminePress"].some((x) => ids.has(x))) return "mixed";
+  if (["rdl","hipThrust","hamCurl","stepUp","ssRdl","splitSquat","kotSplitSquat","reverseStepDown","snapDown","lowPogo","broadJumpDrill","jumpReach","calfRaise","tibRaise","legExt","bandWalk"].some((x) => ids.has(x))) return "lower";
   if (["benchA","benchC","pullup","csRow","pulldown","cableRow1","exPull","muTrans","inclineDb","ohp","pushup","mbThrow","hammer","incCurl","pressdown","ohTri","latRaise"].some((x) => ids.has(x))) return "upper";
   const slot2 = SLOT_OF[entry.sessionId]; return slot2 === "B" || slot2 === "D" ? "lower" : (slot2 === "A" || slot2 === "C" ? "upper" : null);
 }
@@ -1984,6 +2034,21 @@ function pr5ModuleRank(key, budget, projected) {
   const gap = pr5Deficit(b, projected); if (gap <= 0) return -1;
   const floorGap = Math.max(0, Number(b.min||0) - Number(projected[key]||0));
   return gap * (1 + (b.score || 0)) + floorGap * 4;
+}
+function pr5SessionModuleOrder(key) {
+  const order = {
+    verticalPower: 0,
+    pressStrength: 1,
+    lowerStrength: 1,
+    explosivePull: 1,
+    verticalPull: 2,
+    horizontalPull: 3,
+    fieldConditioning: 7,
+    core: 8,
+    arms: 9,
+    easyAerobic: 10,
+  };
+  return order[key] == null ? 6 : order[key];
 }
 function pr5ModuleEligible(mod, d, state, prevMeta, log) {
   const sys = fatigueLevelAt(state.fatigue, "systemic", d);
@@ -2054,7 +2119,8 @@ function pr5BuildStrengthDay(d, available, budget, projected, state, prevMeta, l
   const stage = budget.stage; const rows=[]; const seen=new Set();
   const moduleMinutes = available <= 15 ? 15 : Math.max(15, Math.floor(available / Math.max(1, chosen.length)));
   const moduleKeys = chosen.map((m)=>m.key);
-  chosen.forEach((m) => pr5ModuleRows(m.key, moduleMinutes, stage, state, d, { modules: moduleKeys, variantSalt: family }).forEach((r) => { if (!seen.has(r[0])) { seen.add(r[0]); rows.push(r); } }));
+  const rowOrder = [...chosen].sort((a,b) => pr5SessionModuleOrder(a.key) - pr5SessionModuleOrder(b.key));
+  rowOrder.forEach((m) => pr5ModuleRows(m.key, moduleMinutes, stage, state, d, { modules: moduleKeys, variantSalt: family }).forEach((r) => { if (!seen.has(r[0])) { seen.add(r[0]); rows.push(r); } }));
   if (!rows.length) return null;
   let carrier = family === "lower" ? (state.settings.knee === "irritated" ? "BSAFE" : "B") : (family === "accessory" || family === "mixed") ? "D" : (chosen.some((m)=>m.key==="pressStrength") ? "A" : "C");
   if (carrier === "C" && maxAreaFatigue(state.fatigue,["chest","shoulders","triceps"],d) >= 1) carrier="CPULL";
@@ -2064,10 +2130,10 @@ function pr5BuildStrengthDay(d, available, budget, projected, state, prevMeta, l
   const rowAreas = Array.from(new Set(rows.flatMap((r)=>PR5_EXERCISE_AREAS[r[0]] || [])));
   return {
     id:carrier, family, hard:chosen.some((m)=>m.hard), areas:rowAreas.length ? rowAreas : Array.from(new Set(chosen.flatMap((m)=>m.areas||[]))), modules:moduleKeys, goalKeys,
-    displayName:"Adaptive Session — " + labels.slice(0,4).join(" + "), displayShort:labels.slice(0,2).join(" + "),
+    displayName:"Field-Athlete Session — " + labels.slice(0,4).join(" + "), displayShort:labels.slice(0,2).join(" + "),
     displayDesc:"Built from your Dec 31 outcomes, what is still unbanked this week, recovery and today's " + available + "-minute window.",
-    reasons:["Goal-driven focus: " + focus + ".","A/B/C are only exercise libraries here — this composition was assembled for today."],
-    autoOverride:{ date:d, tier:snapTier(available), availableMinutes:available, remove:pr5CarrierBaseIds(carrier), add:rows.map((r)=>({id:r[0],sr:r[1],note:r[2]})), modules:moduleKeys, reason:"Goal-derived mix · " + labels.join(" + ") },
+    reasons:["Goal-driven focus: " + focus + ".","Athletic flow: prep/power, target strength, conditioning and trunk are mixed only when they help the goals."],
+    autoOverride:{ date:d, tier:snapTier(available), availableMinutes:available, remove:pr5CarrierBaseIds(carrier), add:rows.map((r)=>({id:r[0],sr:r[1],note:r[2]})), modules:moduleKeys, reason:"Goal-built field-athlete session · " + labels.join(" + ") },
   };
 }
 function pr5PinnedIntentModuleKeys(slot, minutes) {
@@ -2107,7 +2173,7 @@ function pr5BuildPinnedTrainingDay(d, pinnedSlot, pinnedId, available, budget, s
   const stage = budget.stage;
   const moduleMinutes = Math.max(15, Math.floor(available / Math.max(1, modules.length)));
   const rows=[]; const seen=new Set();
-  modules.forEach((key) => pr5ModuleRows(key, moduleMinutes, stage, state, d, { modules, variantSalt:"pinned-training-" + slot }).forEach((r) => {
+  [...modules].sort((a,b) => pr5SessionModuleOrder(a) - pr5SessionModuleOrder(b)).forEach((key) => pr5ModuleRows(key, moduleMinutes, stage, state, d, { modules, variantSalt:"pinned-training-" + slot }).forEach((r) => {
     if (!seen.has(r[0])) { seen.add(r[0]); rows.push(r); }
   }));
   if (!rows.length) return null;
@@ -2118,11 +2184,11 @@ function pr5BuildPinnedTrainingDay(d, pinnedSlot, pinnedId, available, budget, s
     hard:modules.some((k)=>PR5_MODULES[k] && PR5_MODULES[k].hard),
     areas:rowAreas.length ? rowAreas : Array.from(new Set(modules.flatMap((k)=>PR5_MODULES[k] && PR5_MODULES[k].areas || []))),
     modules, goalKeys:pr5GoalKeysForModules(modules, 4, state),
-    displayName:"Coached Training — " + labels.slice(0,4).join(" + "),
-    displayShort:"Training · " + labels.slice(0,2).join(" + "),
-    displayDesc:"Pinned intent from chat, rebuilt as a modular coached gym session: strength, core, explosiveness and conditioning in the safest useful mix.",
-    reasons:["Pinned intent: " + (pinnedSlot || slot) + ".","Prescription still adapts like coached training, not a static sheet."],
-    autoOverride:{ date:d, tier:snapTier(available), availableMinutes:available, remove:pr5CarrierBaseIds(pinnedId), add:rows.map((r)=>({id:r[0],sr:r[1],note:r[2]})), modules, reason:"Pinned coached-training intent · " + labels.join(" + ") },
+    displayName:"Field-Athlete Session — " + labels.slice(0,4).join(" + "),
+    displayShort:"Field · " + labels.slice(0,2).join(" + "),
+    displayDesc:"Pinned intent from chat, rebuilt as a field-athlete gym session: strength, core, explosiveness and conditioning in the safest useful mix.",
+    reasons:["Pinned intent: " + (pinnedSlot || slot) + ".","Prescription still adapts like a trainer would, not a static sheet."],
+    autoOverride:{ date:d, tier:snapTier(available), availableMinutes:available, remove:pr5CarrierBaseIds(pinnedId), add:rows.map((r)=>({id:r[0],sr:r[1],note:r[2]})), modules, reason:"Pinned field-athlete intent · " + labels.join(" + ") },
   };
 }
 function pr5RunDay(kind, d, available, budget, projected, state, prevMeta, log) {
@@ -2178,7 +2244,7 @@ function pr5MicroRowsForKey(key, minutes, state, d, constraints) {
   }
   if (key === "fieldConditioning") {
     if (knee === "irritated" || fatigueLevelAt(state.fatigue,"systemic",d)>=2) return [];
-    if (noGym) return [["pushup","1 clean hard set","upper endurance signal"],["microRun", minutes + " min hard-controlled","coach-style substitute"]];
+    if (noGym) return [["pushup","1 clean hard set","upper endurance signal"],["microRun", minutes + " min hard-controlled","conditioning substitute"]];
     return minutes <= 8
       ? [["battleRope","4 × 20 s","fast hands · short field sweat"]]
       : [["battleRope","4 × 30 s","fast hands"],["ballSlam","3 × 8–10","explosive trunk"]];
@@ -2720,7 +2786,7 @@ function buildCoachSystem(state, plan, today) {
     "Current fatigue (0-3, decays unless re-reported): " + (fatigueParts.join(", ") || "none") + ".\n" +
     "Recent coaching observations: " + memory + ".\nLong-term trainer facts: " + trainerFacts + ".\nRecent athlete timeline: " + recentEvents + ".\nRecent food/context: " + recentFood + ". Recent water: " + recentWater + ". Last weekly check-in: " + checkText + ". Active workout: " + activeText + ".\n" +
     "SPORT PERFORMANCE RULESET: " + sportRules + ".\n" +
-    "ATHLETE STYLE: The athlete likes real coached gym training that mixes strength, explosive power, trunk stiffness and conditioning. Coach-style tools are first-class options: sled pushes/drags, battle ropes/rope flips, medicine-ball slams, landmine shoulder press, walking lunges with slams, trap-bar jumps, box jumps, carries, rows and push-ups. Use these when time, recovery, knee status and goals fit; do not make every day a quiet static lift.\n" +
+    "ATHLETE STYLE: Every normal workout should feel like field-athlete conditioning, not a generic bodybuilding split. The day may still bias chest, pull-ups, lower force, speed, arms or recovery, but the default style mixes strength, explosive power, trunk stiffness and sweat. Explosive-conditioning tools are first-class options: sled pushes/drags, backward sled drags, battle ropes/rope flips, medicine-ball slams, rotational throws, scoop tosses, landmine or DB push press, walking lunges with slams, trap-bar jumps, box jumps, lateral bounds, backpedal breaks, shuffle-to-sprint drills, reactive gear sprints, carries, rows and push-ups. Knee-capacity options include reverse step-downs, ATG/KOT split squats, calf/tib work alternatives, couch stretch pulses, pigeon push-ups and slant toe touches. Use these when time, recovery, knee status and goals fit; keep power work low-volume and high-quality, and do not make every day a quiet static lift.\n" +
     "CORE BEHAVIOR: The static program is the starting hypothesis. A/B/C are anchor templates, NOT a push/pull/legs split and NOT sacred day types. The trainer may intelligently combine compatible stimuli on the same day (for example easy aerobic + pull-up skill + a short arms block, or condensed Upper C + 15–20 min easy aerobic) when that better serves the weekly goals. Actual performance data changes future prescription inside safe program constraints. If the user reports what actually happened, update structured state — do not only give advice. A session can be full, partial, skipped, substituted, or mixed. Credit only exercises/stimuli actually completed. Do not create debt for every missed accessory. Primary stimuli matter more than optional accessories.\n" +
     "If the user says the workout was too hard: identify local vs systemic fatigue, log it, and use adjust_week_from_feedback. Hard Upper A should suppress pressing but can leave legs available; hard Lower or hard run should protect the next 24-48h of lower-body intensity. If very hard/systemically wrecked, protect recovery.\n" +
     "If the user says too easy: do NOT punish with random volume. For an accessory that was clearly too easy, use exercise_feedback too_easy (one normal increment). If they mention a load, include actual_weight so the app can learn the load and set the next one. For bench, prefer log_bench with actual reps/RIR evidence rather than a blind jump. For running, record the observation and progress conservatively rather than making a huge one-session jump.\n" +
@@ -2779,15 +2845,27 @@ function localCoachExerciseNamesFromText(lower) {
     [/\brdls?\b|\bromanian deadlifts?\b/, "rdl"],
     [/\bhip thrusts?\b/, "hipThrust"],
     [/\bleg extensions?\b/, "legExt"],
+    [/\bbackward sled\b|\breverse sled\b|\bbackward drags?\b/, "backwardSled"],
     [/\bsled(?:s| push| drag| work)?\b/, "sledPush"],
     [/\bbattle ropes?\b|\brope flips?\b|\brope waves?\b/, "battleRope"],
     [/\bball slams?\b|\bmedicine ball slams?\b|\bmed ball slams?\b/, "ballSlam"],
+    [/\brotational throws?\b|\bmed(?:icine)? ball side throws?\b|\bside toss(?:es)?\b/, "medBallRotThrow"],
+    [/\bscoop toss(?:es)?\b|\bmed(?:icine)? ball scoop\b/, "medBallScoopToss"],
     [/\bmountain climbers?\b|\bball mountain climbers?\b/, "medBallMtClimber"],
     [/\btrap[-\s]?bar jumps?\b|\btrapbar jumps?\b/, "trapBarJump"],
+    [/\bdb push presses?\b|\bdumbbell push presses?\b|\bquick presses?\b/, "dbPushPress"],
     [/\blandmine(?: shoulder)? presses?\b|\bone shoulder quick presses?\b|\bone shoulder presses?\b/, "landminePress"],
     [/\bwalking lunges?\b|\blunge slams?\b|\blunges while slamming\b/, "walkingLungeSlam"],
     [/\bbox jumps?\b/, "boxJump"],
+    [/\blateral bounds?\b|\bskater hops?\b|\bside bounds?\b/, "lateralBound"],
+    [/\bdeceleration\b|\bdecel\b|\bstick drills?\b/, "decelStick"],
+    [/\bbackpedals?\b|\bback pedals?\b|\bbreak drills?\b/, "backpedalBreak"],
+    [/\bshuffle[-\s]?to[-\s]?sprints?\b|\bshuffle sprints?\b/, "shuffleSprint"],
+    [/\breaction sprints?\b|\breactive sprints?\b|\bgear sprints?\b/, "reactiveGear"],
+    [/\bburpee broad jumps?\b/, "burpeeBroadJump"],
     [/\btrx rows?\b|\btrx low rows?\b/, "trxRow"],
+    [/\batg split squats?\b|\bkot split squats?\b|\bknees over toes split squats?\b/, "kotSplitSquat"],
+    [/\breverse step[-\s]?downs?\b|\bpatrick steps?\b/, "reverseStepDown"],
     [/\bsplit squats?\b/, "splitSquat"],
     [/\bcurls?\b/, "curl"],
     [/\blateral raises?\b|\bshoulder raises?\b/, "lateralraise"],
@@ -2796,6 +2874,9 @@ function localCoachExerciseNamesFromText(lower) {
     [/\bcalf\b|\bcalves\b|\bcalf raises?\b/, "calfRaise"],
     [/\btib\b|\btibialis\b|\btib raises?\b/, "tibRaise"],
     [/\bband walks?\b/, "bandWalk"],
+    [/\bcouch stretches?\b/, "couchStretch"],
+    [/\bpigeon push[-\s]?ups?\b/, "pigeonPushup"],
+    [/\bslant toe touches?\b|\btoe touches?\b/, "slantToeTouch"],
   ].forEach(function (p) { if (p[0].test(lower)) out.push(p[1]); });
   return Array.from(new Set(out));
 }
@@ -3115,13 +3196,13 @@ const DEFAULT_TRAINER_FACTS = [
   },
   {
     key: "training_style_field_conditioning",
-    text: "Ryan prefers cornerback-style workouts that mix endurance, strength, explosive power and sweat: battle ropes/rope flips, med-ball slams, landmine shoulder press, walking lunges with slams, sleds, trap-bar jumps, carries, rows and push-ups.",
+    text: "Ryan wants every normal workout to feel like cornerback field-athlete training: strength plus explosive power, trunk stiffness, movement skill and sweat. A day can bias chest, lower, pull-ups, speed or arms, but it should not feel like a generic static split.",
     confidence: .95,
     date: "2026-08-20",
   },
   {
     key: "coach_sheet_reference",
-    text: "Old coach sheet included athletic circuits with jumping jacks, walking rotations, ball mountain climbers, trap-bar jumps, bench/incline press, assisted pull-ups, sled pushes, battle ropes, burpees/ball slams, landmine shoulder press, farmer carries, walking lunges, box jumps and push-ups.",
+    text: "Old coach sheet included athletic circuits with jumping jacks, walking rotations, ball mountain climbers, trap-bar jumps, bench/incline press, assisted pull-ups, sled pushes, battle ropes, burpees/ball slams, landmine shoulder press, farmer carries, walking lunges, box jumps and push-ups. New training menu also includes backward sled drags, reverse step-downs, ATG/KOT split squats, lateral bounds, deceleration sticks, backpedal breaks, shuffle-to-sprint drills, reactive gear sprints, med-ball rotational throws and scoop tosses.",
     confidence: .9,
     date: "2026-08-20",
   },
@@ -3131,13 +3212,41 @@ function defaultTrainerFacts() {
   return DEFAULT_TRAINER_FACTS.map((f) => ({ ...f }));
 }
 
+const KNOWN_TRAINING_LOADS = {
+  benchA: 165,
+  inclineDb: 45,
+  hammer: 30,
+  hamCurl: 115,
+  legExt: 115,
+  stepUp: 0,
+};
+
+function applyKnownTrainingLoads(exercises) {
+  const out = { ...(exercises || {}) };
+  Object.entries(KNOWN_TRAINING_LOADS).forEach(([id, weight]) => {
+    if (!out[id] || out[id].weight != null) return;
+    out[id] = {
+      ...out[id],
+      weight,
+      history: Array.isArray(out[id].history) ? out[id].history : [],
+    };
+  });
+  return out;
+}
+
+function refreshDefaultTrainerFactText(facts, keys) {
+  const defaults = new Map(defaultTrainerFacts().map((f) => [f.key, f]));
+  return (facts || []).map((f) => keys.includes(f.key) && defaults.has(f.key) ? { ...f, ...defaults.get(f.key) } : f);
+}
+
 function freshDefaultState() {
   const exercises = {};
   Object.entries(EXERCISE_DEFAULTS).forEach(([id, def]) => { exercises[id] = { ...def, history: [] }; });
+  const seededExercises = applyKnownTrainingLoads(exercises);
   const calValues = {};
   CAL_BASELINES.forEach((b) => { calValues[b.key] = b.seed || ""; });
   return {
-    version: 4,
+    version: 7,
     settings: {
       weekdayMinutes: { 0: 60, 1: 60, 2: 60, 3: 60, 4: 60, 5: 75, 6: 60 },
       knee: "good",
@@ -3149,7 +3258,7 @@ function freshDefaultState() {
       coachEndpoint: "/api/trainer",
       skillStage: 1,
     },
-    exercises,
+    exercises: seededExercises,
     calibration: { values: calValues, savedAt: {} },
     pins: {},
     dayFlags: {},
@@ -3170,7 +3279,7 @@ function freshDefaultState() {
     goalOverrides: {},
     health: { connected: false },
     metrics: { bodyweight: [], waist: [], pullupBest: [], pushupBest: [], mileBest: null, fiveKBest: null, muscleUp: false },
-    ui: { onboarded: false, helpDismissed: false, lastReminder: "" },
+    ui: { onboarded: false, helpDismissed: false, lastReminder: "", combineComplete: true },
   };
 }
 function mergeState(def, saved) {
@@ -3188,6 +3297,10 @@ function mergeState(def, saved) {
     out.exercises[id] = { ...def.exercises[id], ...((saved.exercises || {})[id] || {}) };
     if (!Array.isArray(out.exercises[id].history)) out.exercises[id].history = [];
   });
+  out.exercises = applyKnownTrainingLoads(out.exercises);
+  CAL_BASELINES.forEach((b) => {
+    if (b.seed && !String(out.calibration.values[b.key] || "").trim()) out.calibration.values[b.key] = b.seed;
+  });
   out.pins = { ...(saved.pins || {}) };
   out.dayFlags = { ...(saved.dayFlags || {}) };
   out.dayWorkoutOverrides = { ...(saved.dayWorkoutOverrides || {}) };
@@ -3201,6 +3314,9 @@ function mergeState(def, saved) {
       120,
     ),
   };
+  if (Number(saved.version || 0) < 7) {
+    out.trainerMemory.facts = refreshDefaultTrainerFactText(out.trainerMemory.facts, ["training_style_field_conditioning", "coach_sheet_reference"]);
+  }
   out.athleteEvents = Array.isArray(saved.athleteEvents) ? saved.athleteEvents : [];
   out.log = Array.isArray(saved.log) ? saved.log : [];
   out.nutrition = Array.isArray(saved.nutrition) ? saved.nutrition : [];
@@ -3214,6 +3330,11 @@ function mergeState(def, saved) {
   out.goalOverrides = { ...(saved.goalOverrides || {}) };
   out.health = { ...def.health, ...(saved.health || {}) };
   out.ui = { ...def.ui, ...(saved.ui || {}) };
+  out.version = def.version;
+  const savedUi = saved.ui || {};
+  if (!Object.prototype.hasOwnProperty.call(savedUi, "combineComplete") && Number(saved.version || 0) < 5) {
+    out.ui.combineComplete = true;
+  }
   return out;
 }
 
@@ -3788,8 +3909,8 @@ h2.sec{font-size:16px;font-weight:750;margin-bottom:4px}
 .goalrow{display:grid;grid-template-columns:110px 1fr 130px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
 .goalrow:last-child{border-bottom:none}
 .goalrow.paused{opacity:.55}
-.modal-scrim{position:fixed;inset:0;background:rgba(5,8,13,.72);z-index:60;display:flex;align-items:center;justify-content:center;padding:20px}
-.modal{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:22px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.modal-scrim{position:fixed;inset:0;background:rgba(5,8,13,.72);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto}
+.modal{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:22px;max-width:640px;width:100%;max-height:calc(100vh - 40px);overflow-y:auto;overscroll-behavior:contain;box-shadow:0 20px 60px rgba(0,0,0,.6);scrollbar-width:thin}
 .monthcard{border-left:2px solid var(--line2);padding-left:16px;margin-top:18px}
 .monthcard.on{border-left-color:var(--accent)}
 .badge{font-family:var(--mono);font-size:10px;letter-spacing:.12em;border:1px solid var(--line2);border-radius:4px;padding:2px 6px;color:var(--dim)}
@@ -3905,6 +4026,15 @@ function snapTier(mins) {
   return 15;
 }
 function tierLabel(t) { return t === 15 ? "15 min · MES" : t + " min"; }
+function starterLoadLabel(ex) {
+  if (!ex) return "start easy";
+  if (ex.starterLabel) return ex.starterLabel;
+  if (ex.starter != null) {
+    if (Number(ex.starter) === 0) return "bodyweight";
+    return "start " + ex.starter + " " + ex.unit;
+  }
+  return "start easy";
+}
 function exerciseLoadChip(state, exId, goCalibrate) {
   const ex = state.exercises[exId];
   if (!ex) return null;
@@ -3913,10 +4043,10 @@ function exerciseLoadChip(state, exId, goCalibrate) {
   if (ex.derived && state.exercises.benchA.weight) {
     return <span className="wchip num">≈{Math.round((state.exercises.benchA.weight * 0.65) / 5) * 5} lb</span>;
   }
-  if (goCalibrate) {
+  if (goCalibrate && !(state.ui && state.ui.combineComplete)) {
     return <button className="wchip missing" onClick={goCalibrate} style={{ cursor: "pointer", background: "none" }}>calibrate →</button>;
   }
-  return <span className="wchip missing">calibrate</span>;
+  return <span className="wchip missing">{starterLoadLabel(ex)}</span>;
 }
 
 /* ------------------------------ TODAY VIEW ------------------------------- */
@@ -3933,12 +4063,20 @@ function KneeSelector({ knee, setKnee }) {
 }
 
 function ExerciseList({ session, tier, state, goCalibrate, date, autoOverride }) {
-  const override = mergeDayOverrides(resizeGoalOverrideForTier(autoOverride, tier, state), date ? (state.dayWorkoutOverrides || {})[date] : null);
+  const userDayOverride = date ? (state.dayWorkoutOverrides || {})[date] : null;
+  const override = mergeDayOverrides(resizeGoalOverrideForTier(autoOverride, tier, state), userDayOverride);
   const list = effectiveList(session, tier, state.sessionMods, override);
   if (!list) return null;
+  const userAdjusted = !!(userDayOverride && (
+    (userDayOverride.remove || []).length ||
+    (userDayOverride.add || []).length ||
+    userDayOverride.reason ||
+    userDayOverride.runOverride
+  ));
+  const adjustedReason = pr5DisplayOverrideReason(override) || "some work was removed to match recovery/time.";
   return (
     <div style={{ marginTop: 10 }}>
-      {override && (override.remove || []).length > 0 && <p className="small" style={{ color: "var(--warn)", marginBottom: 8 }}>Coach-adjusted today: {override.reason || "some work was removed to match recovery/time."}</p>}
+      {userAdjusted && <p className="small" style={{ color: "var(--warn)", marginBottom: 8 }}>Trainer-adjusted today: {adjustedReason}</p>}
       {list.map(([exId, sr, note], i) => {
         const ex = state.exercises[exId];
         return (
@@ -4236,7 +4374,8 @@ function TodayView({ state, actions, plan, today, setTab }) {
   const dayPlan = plan.days.find((d) => d.date === today) || { status: "rest", id: null, reasons: [] };
   const session = dayPlan.id ? SESSIONS[dayPlan.id] : null;
   const phase = phaseOf(today);
-  const phaseChip = state.ui.combineComplete && (phase === "pre" || phase === "cal") ? "PRESEASON · TRAINING" : PHASES[phase].chip;
+  const combineDone = !!(state.ui && state.ui.combineComplete);
+  const phaseChip = combineDone && (phase === "pre" || phase === "cal") ? "PRESEASON · TRAINING" : PHASES[phase].chip;
   const availToday = pr5AvailabilityForDate(state.settings, state, today);
   const defaultTier = snapTier(availToday == null ? 60 : availToday);
   const [tier, setTier] = useState(defaultTier);
@@ -4271,9 +4410,14 @@ function TodayView({ state, actions, plan, today, setTab }) {
           </div>
         </div>
 
-        {phase === "pre" && (
+        {phase === "pre" && !combineDone && (
           <p className="small dim" style={{ marginTop: 10 }}>
             Preseason. The combine opens <b style={{ color: "var(--text)" }}>Wednesday, Aug 19</b> — baseline tests and load calibration, spread across ~10 days so nothing is exhausting. Today stays light on purpose.
+          </p>
+        )}
+        {(phase === "pre" || phase === "cal") && combineDone && (
+          <p className="small dim" style={{ marginTop: 10 }}>
+            Combine accepted complete. The trainer is using your baseline signals now; missing precision gets learned from workout feedback instead of blocking training.
           </p>
         )}
 
@@ -4298,7 +4442,7 @@ function TodayView({ state, actions, plan, today, setTab }) {
                   ))}
                 </div>
                 {tier === 15 && <p className="small dim" style={{ marginTop: 8 }}>Not a failed version of the long workout — the highest-priority stimulus, preserved on a busy day.</p>}
-                {mergedOverride.reason && <p className="small" style={{ color: "var(--accent)", marginTop: 8 }}>{mergedOverride.reason}</p>}
+                {mergedOverride.reason && <p className="small" style={{ color: "var(--accent)", marginTop: 8 }}>{pr5DisplayOverrideReason(mergedOverride)}</p>}
                 <ExerciseList session={session} tier={tier} state={state} date={today} autoOverride={dayPlan.autoOverride} goCalibrate={() => setTab("CALIBRATION")} />
               </div>
             )}
@@ -4545,8 +4689,9 @@ function WorkoutPrescriptionPreview({ day, session, tier, state, setTab, onClose
   const visibleList = runRx ? list.filter(([exId]) => !runExerciseIds.has(exId)) : list;
   const minutes = override.availableMinutes != null ? Number(override.availableMinutes) : (day.availableMinutes != null ? Number(day.availableMinutes) : effectiveTier);
   const isMicro = session.id === "MICRO" || session.id === "MICRORUN" || minutes < 15;
-  const moduleLabels = Array.from(new Set(override.modules || [])).map(pr5ModuleLabel);
-  const goCalibrate = () => { onClose(); setTab("CALIBRATION"); };
+  const modulePhrase = pr5ModulePhrase(override.modules || []);
+  const reasonText = pr5DisplayOverrideReason(override);
+  const goCalibrate = state.ui && state.ui.combineComplete ? null : () => { onClose(); setTab("CALIBRATION"); };
   if (!runRx && !visibleList.length) return null;
   return (
     <div className="rxbox">
@@ -4559,8 +4704,8 @@ function WorkoutPrescriptionPreview({ day, session, tier, state, setTab, onClose
         </div>
         <span className={isMicro ? "mes" : "badge"}>{minutes ? minutes + " min" : tierLabel(effectiveTier)}</span>
       </div>
-      {moduleLabels.length > 0 && <p className="small dim" style={{ marginTop: 9 }}>Modules: {moduleLabels.join(" + ")}</p>}
-      {override.reason && <p className="small" style={{ color: "var(--accent)", marginTop: 7 }}>{override.reason}</p>}
+      {modulePhrase && <p className="small dim" style={{ marginTop: 9 }}>Focus: {modulePhrase}</p>}
+      {reasonText && <p className="small" style={{ color: "var(--accent)", marginTop: 7 }}>{reasonText}</p>}
       {runRx && (
         <div className="rxrun">
           <div className="rxidx"><Activity size={14} /></div>
@@ -4643,9 +4788,6 @@ function SessionDetailModal({ day, state, actions, plan, today, setTab, onClose 
         <div style={{ marginTop: 8 }}>
           {day.reasons.map((r, i) => (<p className="reason" key={i}>{r}</p>))}
         </div>
-      )}
-      {session && day.autoOverride && day.autoOverride.reason && (
-        <p className="small" style={{ color: "var(--accent)", marginTop: 8 }}>{day.autoOverride.reason}</p>
       )}
       {session && <DayImpactBox day={day} plan={plan} state={state} />}
       {!session && <p className="small dim" style={{ marginTop: 10 }}>Nothing scheduled — rest is programmed, not a gap.</p>}
@@ -4898,8 +5040,9 @@ function ProgramModuleCard({ moduleKey, stage }) {
   const m = PR5_MODULES[moduleKey];
   const stim = PR5_STIMULI[moduleKey];
   if (!m || !stim) return null;
-  const options = pr5ModuleMenu(moduleKey, stage).slice(0, 4);
-  const familyLabel = m.family === "runHard" ? "quality run" : m.family === "easy" ? "easy cardio" : m.family === "mixed" ? "coached circuit" : m.family;
+  const optionLimit = moduleKey === "fieldConditioning" ? 9 : moduleKey === "pressStrength" ? 7 : 6;
+  const options = pr5ModuleMenu(moduleKey, stage).slice(0, optionLimit);
+  const familyLabel = m.family === "runHard" ? "quality run" : m.family === "easy" ? "easy cardio" : m.family === "mixed" ? "power conditioning" : m.family;
   return (
     <div className="kpi" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div className="eyebrow" style={{ color: m.hard ? "var(--warn)" : "var(--accent)" }}>{familyLabel} · {m.range || ("~" + m.minutes)} min</div>
@@ -4946,12 +5089,12 @@ function ProgramView({ state, actions, setTab, plan, today }) {
     <div>
       <div className="card">
         <div className="eyebrow">The adaptive playbook · Cornerback Project</div>
-        <h1 className="big">Modules first. Calendar second.</h1>
+        <h1 className="big">Field-athlete training first. Calendar second.</h1>
         <p className="small dim" style={{ marginTop: 8 }}>
-          The old A/B/C/D labels are now exercise libraries. The trainer chooses from modules — press strength, pull-up strength, lower force, jump development, field conditioning, quality running, easy aerobic, core, arms and recovery — then mixes the safest useful set for the day.
+          Every normal workout should feel like cornerback preparation: move, sweat, brace, explode, then bias the day toward the goal that needs work. The old A/B/C/D labels are only exercise libraries; the trainer chooses the safest useful mix for today.
         </p>
         <p className="small" style={{ marginTop: 10, color: "var(--ice)" }}>
-          The method: derive what adaptations are needed for Dec 31, subtract what you actually banked, gate it through knee/fatigue/time, then prescribe the next useful dose. Stretching, easy cardio and small accessories can ride with lifting when they do not interfere.
+          The method: derive what adaptations are needed for Dec 31, subtract what you actually banked, gate it through knee/fatigue/time, then prescribe the next useful dose. A session may be chest-biased, pull-up-biased, lower-biased or speed-biased, but it should still feel athletic unless recovery says otherwise.
         </p>
         <div className="btnrow">
           <button className="btn primary sm" onClick={() => setTab("TODAY")}><Zap size={13} /> See Today</button>
@@ -4987,8 +5130,8 @@ function ProgramView({ state, actions, setTab, plan, today }) {
 
       <div className="card">
         <div className="eyebrow">Module library</div>
-        <h2 className="sec">What the trainer can combine</h2>
-        <p className="small dim" style={{ marginTop: 6 }}>These are menus, not static workouts. The trainer picks the day’s version from time, goal pressure, soreness, exercise feedback and what has already been banked.</p>
+        <h2 className="sec">What the trainer can bias</h2>
+        <p className="small dim" style={{ marginTop: 6 }}>These are not separate workout styles. They are goal signals inside the same field-athlete training method, so a chest day can still include explosive work and sweat without losing the chest focus.</p>
         <div className="grid3" style={{ marginTop: 12 }}>
           {modules.map((key) => <ProgramModuleCard key={key} moduleKey={key} stage={cbStage} />)}
         </div>
@@ -4997,10 +5140,10 @@ function ProgramView({ state, actions, setTab, plan, today }) {
       <div className="card">
         <div className="eyebrow">Example hybrid days</div>
         <div className="grid2" style={{ marginTop: 12 }}>
-          <MixExample title="Lift + engine" body="Bench or pull-up strength can pair with 15–25 minutes of easy aerobic when it does not create lower-body interference." chips={["press/pull", "easy aerobic", "core optional"]} />
+          <MixExample title="Chest-biased field session" body="A short explosive primer can lead into bench, incline press and push-ups. The target is chest/pressing, but the shape still feels athletic." chips={["power primer", "press focus", "sweat"]} />
           <MixExample title="Lower + jump foundation" body="Early vertical work is not dunk attempts. It is ankle, calf, hip and landing capacity layered around lower force." chips={["lower force", "jump foundation", "knee gate"]} />
           <MixExample title="Run + trunk" body="Quality running owns the day when it is hard. Low-fatigue core or mobility can attach after, but extra leg work usually waits." chips={["quality run", "core", "mobility"]} />
-          <MixExample title="Coached gym circuit" body="When the goals need athletic sweat instead of another quiet lift, the trainer can use sleds, ropes, ball slams, landmine press, carries, rows and jumps." chips={["sled / ropes", "med ball", "power conditioning"]} />
+          <MixExample title="Power-conditioning dose" body="Sleds, ropes, ball slams, landmine press, carries, rows and jumps are the conditioning tools. They support the session instead of replacing the main goal." chips={["sled / ropes", "med ball", "power conditioning"]} />
           <MixExample title="15-minute minimum" body="A short day preserves the highest-value dose: press exposure, pull-ups, arms, core or mobility, depending on what moves the goal forecast most." chips={["MES", "priority only", "no junk"]} />
         </div>
       </div>
