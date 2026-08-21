@@ -50,7 +50,7 @@ It does **not** combine hard run + hard lower work or ignore recent muscle fatig
 
 ## Data
 
-Progress is stored locally in the browser as an offline fallback. When `NEON_DATABASE_URL` is set, `/api/trainer` also saves structured trainer turns to Postgres: chat actions, durable facts, body metrics, recovery, food/water, workout sessions, exercise feedback, and day-level planner overrides.
+The browser keeps UI state cached so the app can render, but trainer chat is backend-required. When `OPENAI_API_KEY` and `NEON_DATABASE_URL` are set, `/api/trainer` saves structured trainer turns to Postgres: chat actions, durable facts, body metrics, recovery, food/water, workout sessions, exercise feedback, and day-level planner overrides. If the backend, AI key, or database is missing, trainer chat refuses the message instead of pretending it learned.
 
 The backend also maintains a compact trainer profile summary in Postgres. `/api/trainer/profile` reports the latest profile and signal counts, `/api/trainer/profile/refresh` rebuilds it, and saved trainer turns can refresh it automatically when enough new feedback exists. That summary is injected into future `/api/trainer` prompts through the durable database context. Goal override actions are hydrated back into the browser state, so active/paused targets survive reloads and other devices when Postgres is connected.
 
@@ -62,7 +62,16 @@ npm run migrate
 npm run dev
 ```
 
-Use Neon for `NEON_DATABASE_URL` and keep both `NEON_DATABASE_URL` and `OPENAI_API_KEY` in `.env` locally or Replit Secrets in Replit. `DATABASE_URL` is still accepted as a fallback. Optional: set `OPENAI_MODEL` and `OPENAI_SUMMARY_MODEL`; both default to `gpt-5-mini`.
+Local setup:
+
+1. Paste your OpenAI key after `OPENAI_API_KEY=` in `.env`.
+2. Paste your Neon connection string after `NEON_DATABASE_URL=` in `.env`.
+3. Restart the server with `npm run dev`.
+4. Open the URL printed by the server, usually `http://localhost:5174/` on this Mac.
+
+Replit setup:
+
+Add the same names in Replit Secrets: `OPENAI_API_KEY` and `NEON_DATABASE_URL`. Replit secrets do not get pushed to Git and do not create a local `.env` on this Mac. `DATABASE_URL` is still accepted as a fallback if a host only supports that name. Optional: set `OPENAI_MODEL` and `OPENAI_SUMMARY_MODEL`; both default to `gpt-5-mini`.
 
 ## Apple Health
 
